@@ -1,0 +1,29 @@
+[INFO] 15:00:34 ts-node-dev ver. 2.0.0 (using ts-node ver. 10.9.2, typescript ver. 5.9.3)
+[Nest] 1928  - 14/08/2026 15:00:35     LOG [NestFactory] Starting Nest application...
+[Nest] 1928  - 14/08/2026 15:00:35     LOG [InstanceLoader] AppModule dependencies initialized +21ms
+[Nest] 1928  - 14/08/2026 15:00:35     LOG [InstanceLoader] PaymentsModule dependencies initialized +10ms
+[Nest] 1928  - 14/08/2026 15:00:35     LOG [InstanceLoader] MessagesModule dependencies initialized +1ms
+[Nest] 1928  - 14/08/2026 15:00:35     LOG [InstanceLoader] GamesModule dependencies initialized +1ms
+[Nest] 1928  - 14/08/2026 15:00:35     LOG [InstanceLoader] RealtimeModule dependencies initialized +1ms
+[Nest] 1928  - 14/08/2026 15:00:35     LOG [InstanceLoader] AuthModule dependencies initialized +1ms
+[Nest] 1928  - 14/08/2026 15:00:35     LOG [InstanceLoader] UsersModule dependencies initialized +0ms
+[Nest] 1928  - 14/08/2026 15:00:35     LOG [InstanceLoader] WalletModule dependencies initialized +0ms
+Seed user already exists: seed@lalao.test
+[Nest] 1928  - 14/08/2026 15:00:35     LOG [WebSocketsController] RealtimeGateway subscribed to the "join-room" message +48ms
+[Nest] 1928  - 14/08/2026 15:00:35     LOG [WebSocketsController] RealtimeGateway subscribed to the "move" message +0ms
+[Nest] 1928  - 14/08/2026 15:00:35     LOG [WebSocketsController] RealtimeGateway subscribed to the "chat" message +0ms
+[Nest] 1928  - 14/08/2026 15:00:35     LOG [RoutesResolver] AuthController {/auth}: +1ms
+[Nest] 1928  - 14/08/2026 15:00:35     LOG [RouterExplorer] Mapped {/auth/register, POST} route +2ms
+[Nest] 1928  - 14/08/2026 15:00:35     LOG [RouterExplorer] Mapped {/auth/login, POST} route +0ms
+[Nest] 1928  - 14/08/2026 15:00:35     LOG [RoutesResolver] UsersController {/users}: +0ms
+[Nest] 1928  - 14/08/2026 15:00:35     LOG [RouterExplorer] Mapped {/users/:id, GET} route +1ms
+[Nest] 1928  - 14/08/2026 15:00:35     LOG [RouterExplorer] Mapped {/users, GET} route +0ms
+[Nest] 1928  - 14/08/2026 15:00:35     LOG [RoutesResolver] WalletController {/wallet}: +0ms
+[Nest] 1928  - 14/08/2026 15:00:35     LOG [RouterExplorer] Mapped {/wallet/:userId, GET} route +0ms
+[Nest] 1928  - 14/08/2026 15:00:35     LOG [RouterExplorer] Mapped {/wallet/history/:userId, GET} route +1ms
+[Nest] 1928  - 14/08/2026 15:00:35     LOG [RouterExplorer] Mapped {/wallet/deposit/:userId, POST} route +0ms
+[Nest] 1928  - 14/08/2026 15:00:35     LOG [RouterExplorer] Mapped {/wallet/withdraw/:userId, POST} route +0ms
+[Nest] 1928  - 14/08/2026 15:00:35     LOG [RoutesResolver] MessagesController {/messages}: +0ms
+[Nest] 1928  - 14/08/2026 15:00:35     LOG [RouterExplorer] Mapped {/messages/room/:roomId, GET} route +1ms
+[Nest] 1928  - 14/08/2026 15:00:36     LOG [NestApplication] Nest application successfully started +8ms
+Server listening on http://localhost:3000

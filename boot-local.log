@@ -1,0 +1,73 @@
+[32m[Nest] 14000  - [39m27/08/2026 14:16:34 [32m    LOG[39m [38;5;3m[NestFactory] [39m[32mStarting Nest application...[39m
+[32m[Nest] 14000  - [39m27/08/2026 14:16:34 [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mAppModule dependencies initialized[39m[38;5;3m +93ms[39m
+[32m[Nest] 14000  - [39m27/08/2026 14:16:34 [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mMessagesModule dependencies initialized[39m[38;5;3m +1ms[39m
+[32m[Nest] 14000  - [39m27/08/2026 14:16:34 [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mRealtimeModule dependencies initialized[39m[38;5;3m +1ms[39m
+[32m[Nest] 14000  - [39m27/08/2026 14:16:34 [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mAuthModule dependencies initialized[39m[38;5;3m +2ms[39m
+[32m[Nest] 14000  - [39m27/08/2026 14:16:34 [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mPaymentsModule dependencies initialized[39m[38;5;3m +1ms[39m
+[32m[Nest] 14000  - [39m27/08/2026 14:16:34 [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mUsersModule dependencies initialized[39m[38;5;3m +1ms[39m
+[32m[Nest] 14000  - [39m27/08/2026 14:16:34 [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mWalletModule dependencies initialized[39m[38;5;3m +0ms[39m
+[32m[Nest] 14000  - [39m27/08/2026 14:16:34 [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mMarketplaceModule dependencies initialized[39m[38;5;3m +0ms[39m
+[32m[Nest] 14000  - [39m27/08/2026 14:16:34 [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mGamesModule dependencies initialized[39m[38;5;3m +1ms[39m
+[32m[Nest] 14000  - [39m27/08/2026 14:16:34 [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mAdminModule dependencies initialized[39m[38;5;3m +1ms[39m
+[32m[Nest] 14000  - [39m27/08/2026 14:16:35 [32m    LOG[39m [38;5;3m[WebSocketsController] [39m[32mRealtimeGateway subscribed to the "join-room" message[39m[38;5;3m +333ms[39m
+[32m[Nest] 14000  - [39m27/08/2026 14:16:35 [32m    LOG[39m [38;5;3m[WebSocketsController] [39m[32mRealtimeGateway subscribed to the "room-presence-get" message[39m[38;5;3m +1ms[39m
+[32m[Nest] 14000  - [39m27/08/2026 14:16:35 [32m    LOG[39m [38;5;3m[WebSocketsController] [39m[32mRealtimeGateway subscribed to the "move" message[39m[38;5;3m +0ms[39m
+[32m[Nest] 14000  - [39m27/08/2026 14:16:35 [32m    LOG[39m [38;5;3m[WebSocketsController] [39m[32mRealtimeGateway subscribed to the "chat" message[39m[38;5;3m +0ms[39m
+[32m[Nest] 14000  - [39m27/08/2026 14:16:35 [32m    LOG[39m [38;5;3m[WebSocketsController] [39m[32mRealtimeGateway subscribed to the "chess:create-room" message[39m[38;5;3m +1ms[39m
+[32m[Nest] 14000  - [39m27/08/2026 14:16:35 [32m    LOG[39m [38;5;3m[WebSocketsController] [39m[32mRealtimeGateway subscribed to the "chess:join-room" message[39m[38;5;3m +1ms[39m
+[32m[Nest] 14000  - [39m27/08/2026 14:16:35 [32m    LOG[39m [38;5;3m[WebSocketsController] [39m[32mRealtimeGateway subscribed to the "chess:spectate" message[39m[38;5;3m +0ms[39m
+[32m[Nest] 14000  - [39m27/08/2026 14:16:35 [32m    LOG[39m [38;5;3m[WebSocketsController] [39m[32mRealtimeGateway subscribed to the "chess:room-sync" message[39m[38;5;3m +0ms[39m
+[32m[Nest] 14000  - [39m27/08/2026 14:16:35 [32m    LOG[39m [38;5;3m[WebSocketsController] [39m[32mRealtimeGateway subscribed to the "chess:my-room" message[39m[38;5;3m +1ms[39m
+[32m[Nest] 14000  - [39m27/08/2026 14:16:35 [32m    LOG[39m [38;5;3m[WebSocketsController] [39m[32mRealtimeGateway subscribed to the "chess:list-rooms" message[39m[38;5;3m +0ms[39m
+[32m[Nest] 14000  - [39m27/08/2026 14:16:35 [32m    LOG[39m [38;5;3m[WebSocketsController] [39m[32mRealtimeGateway subscribed to the "chess:invite" message[39m[38;5;3m +3ms[39m
+[32m[Nest] 14000  - [39m27/08/2026 14:16:35 [32m    LOG[39m [38;5;3m[WebSocketsController] [39m[32mRealtimeGateway subscribed to the "chess:set-ready" message[39m[38;5;3m +0ms[39m
+[32m[Nest] 14000  - [39m27/08/2026 14:16:35 [32m    LOG[39m [38;5;3m[WebSocketsController] [39m[32mRealtimeGateway subscribed to the "chess:start-game" message[39m[38;5;3m +1ms[39m
+[32m[Nest] 14000  - [39m27/08/2026 14:16:35 [32m    LOG[39m [38;5;3m[WebSocketsController] [39m[32mRealtimeGateway subscribed to the "chess:game-over" message[39m[38;5;3m +1ms[39m
+[32m[Nest] 14000  - [39m27/08/2026 14:16:35 [32m    LOG[39m [38;5;3m[WebSocketsController] [39m[32mRealtimeGateway subscribed to the "chess:move" message[39m[38;5;3m +0ms[39m
+[32m[Nest] 14000  - [39m27/08/2026 14:16:35 [32m    LOG[39m [38;5;3m[WebSocketsController] [39m[32mRealtimeGateway subscribed to the "chess:leave-room" message[39m[38;5;3m +0ms[39m
+[32m[Nest] 14000  - [39m27/08/2026 14:16:35 [32m    LOG[39m [38;5;3m[RoutesResolver] [39m[32mHealthController {/health}:[39m[38;5;3m +3ms[39m
+[32m[Nest] 14000  - [39m27/08/2026 14:16:35 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/health, GET} route[39m[38;5;3m +4ms[39m
+[32m[Nest] 14000  - [39m27/08/2026 14:16:35 [32m    LOG[39m [38;5;3m[RoutesResolver] [39m[32mAuthController {/auth}:[39m[38;5;3m +1ms[39m
+[32m[Nest] 14000  - [39m27/08/2026 14:16:35 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/auth/register, POST} route[39m[38;5;3m +1ms[39m
+[32m[Nest] 14000  - [39m27/08/2026 14:16:35 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/auth/forgot-password, POST} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 14000  - [39m27/08/2026 14:16:35 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/auth/login, POST} route[39m[38;5;3m +1ms[39m
+[32m[Nest] 14000  - [39m27/08/2026 14:16:35 [32m    LOG[39m [38;5;3m[RoutesResolver] [39m[32mUsersController {/users}:[39m[38;5;3m +0ms[39m
+[32m[Nest] 14000  - [39m27/08/2026 14:16:35 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/users/me, GET} route[39m[38;5;3m +1ms[39m
+[32m[Nest] 14000  - [39m27/08/2026 14:16:35 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/users/me, PATCH} route[39m[38;5;3m +2ms[39m
+[32m[Nest] 14000  - [39m27/08/2026 14:16:35 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/users/:id/public, GET} route[39m[38;5;3m +3ms[39m
+[32m[Nest] 14000  - [39m27/08/2026 14:16:35 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/users/:id, GET} route[39m[38;5;3m +1ms[39m
+[32m[Nest] 14000  - [39m27/08/2026 14:16:35 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/users, GET} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 14000  - [39m27/08/2026 14:16:35 [32m    LOG[39m [38;5;3m[RoutesResolver] [39m[32mWalletController {/wallet}:[39m[38;5;3m +1ms[39m
+[32m[Nest] 14000  - [39m27/08/2026 14:16:35 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/wallet/:userId, GET} route[39m[38;5;3m +1ms[39m
+[32m[Nest] 14000  - [39m27/08/2026 14:16:35 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/wallet/history/:userId, GET} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 14000  - [39m27/08/2026 14:16:35 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/wallet/deposit/:userId, POST} route[39m[38;5;3m +1ms[39m
+[32m[Nest] 14000  - [39m27/08/2026 14:16:35 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/wallet/withdraw/:userId, POST} route[39m[38;5;3m +1ms[39m
+[32m[Nest] 14000  - [39m27/08/2026 14:16:35 [32m    LOG[39m [38;5;3m[RoutesResolver] [39m[32mPaymentsController {/payments/mvola}:[39m[38;5;3m +0ms[39m
+[32m[Nest] 14000  - [39m27/08/2026 14:16:35 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/payments/mvola/status-config, GET} route[39m[38;5;3m +1ms[39m
+[32m[Nest] 14000  - [39m27/08/2026 14:16:35 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/payments/mvola/deposit, POST} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 14000  - [39m27/08/2026 14:16:35 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/payments/mvola/withdraw, POST} route[39m[38;5;3m +1ms[39m
+[32m[Nest] 14000  - [39m27/08/2026 14:16:35 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/payments/mvola/status/:correlationId, GET} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 14000  - [39m27/08/2026 14:16:35 [32m    LOG[39m [38;5;3m[RoutesResolver] [39m[32mManualPaymentsController {/payments/manual}:[39m[38;5;3m +1ms[39m
+[32m[Nest] 14000  - [39m27/08/2026 14:16:35 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/payments/manual/deposit, POST} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 14000  - [39m27/08/2026 14:16:35 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/payments/manual/withdraw, POST} route[39m[38;5;3m +1ms[39m
+[32m[Nest] 14000  - [39m27/08/2026 14:16:35 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/payments/manual/mine, GET} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 14000  - [39m27/08/2026 14:16:35 [32m    LOG[39m [38;5;3m[RoutesResolver] [39m[32mGamesController {/games}:[39m[38;5;3m +1ms[39m
+[32m[Nest] 14000  - [39m27/08/2026 14:16:35 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/games/tournaments, GET} route[39m[38;5;3m +1ms[39m
+[32m[Nest] 14000  - [39m27/08/2026 14:16:35 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/games/tournaments/:id/join, POST} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 14000  - [39m27/08/2026 14:16:35 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/games/tournaments/:id/participants, GET} route[39m[38;5;3m +1ms[39m
+[32m[Nest] 14000  - [39m27/08/2026 14:16:35 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/games/tournaments, POST} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 14000  - [39m27/08/2026 14:16:35 [32m    LOG[39m [38;5;3m[RoutesResolver] [39m[32mMessagesController {/messages}:[39m[38;5;3m +1ms[39m
+[32m[Nest] 14000  - [39m27/08/2026 14:16:35 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/messages/room/:roomId, GET} route[39m[38;5;3m +1ms[39m
+[32m[Nest] 14000  - [39m27/08/2026 14:16:35 [32m    LOG[39m [38;5;3m[RoutesResolver] [39m[32mAdminController {/admin}:[39m[38;5;3m +3ms[39m
+[32m[Nest] 14000  - [39m27/08/2026 14:16:35 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/admin/stats, GET} route[39m[38;5;3m +1ms[39m
+[32m[Nest] 14000  - [39m27/08/2026 14:16:35 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/admin/payment-requests, GET} route[39m[38;5;3m +1ms[39m
+[32m[Nest] 14000  - [39m27/08/2026 14:16:35 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/admin/payment-requests/:id/approve, POST} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 14000  - [39m27/08/2026 14:16:35 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/admin/payment-requests/:id/reject, POST} route[39m[38;5;3m +1ms[39m
+[32m[Nest] 14000  - [39m27/08/2026 14:16:35 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/admin/users, GET} route[39m[38;5;3m +1ms[39m
+[32m[Nest] 14000  - [39m27/08/2026 14:16:35 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/admin/products, GET} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 14000  - [39m27/08/2026 14:16:35 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/admin/products, POST} route[39m[38;5;3m +1ms[39m
+[32m[Nest] 14000  - [39m27/08/2026 14:16:35 [32m    LOG[39m [38;5;3m[RoutesResolver] [39m[32mMarketplaceController {/marketplace}:[39m[38;5;3m +0ms[39m
+[32m[Nest] 14000  - [39m27/08/2026 14:16:35 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/marketplace/products, GET} route[39m[38;5;3m +1ms[39m
+[32m[Nest] 14000  - [39m27/08/2026 14:16:35 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/marketplace/orders, GET} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 14000  - [39m27/08/2026 14:16:35 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/marketplace/buy, POST} route[39m[38;5;3m +1ms[39m
+[32m[Nest] 14000  - [39m27/08/2026 14:16:35 [32m    LOG[39m [38;5;3m[NestApplication] [39m[32mNest application successfully started[39m[38;5;3m +19ms[39m
