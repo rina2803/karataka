@@ -1,0 +1,10 @@
+import { Controller, Get, Header } from '@nestjs/common';
+
+@Controller('test')
+export class TestController {
+  @Get()
+  @Header('Content-Type', 'text/html; charset=utf-8')
+  page() {
+    return '<!doctype html><html lang="fr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Lalao sy Karataka - Test API</title><style>body{font-family:system-ui,sans-serif;max-width:560px;margin:40px auto;padding:20px;color:#10244a}button{padding:12px 16px;margin:6px 4px;border:0;border-radius:8px;background:#1468e8;color:#fff;font-weight:700}input{display:block;width:100%;box-sizing:border-box;padding:12px;margin:8px 0;border:1px solid #ccd8e8;border-radius:8px}pre{white-space:pre-wrap;background:#f3f7fc;padding:14px;border-radius:8px}</style></head><body><h1>Lalao sy Karataka</h1><p>Page publique de verification du backend.</p><button onclick="health()">Tester /health</button><hr><input id="email" type="email" placeholder="seed@lalao.test"><input id="password" type="password" placeholder="Mot de passe"><button onclick="login()">Tester la connexion</button><pre id="result">Resultat affiche ici.</pre><script>const out=document.getElementById("result");async function health(){out.textContent="Test en cours...";try{const r=await fetch("/health");out.textContent="HTTP "+r.status+"\n"+JSON.stringify(await r.json(),null,2)}catch(e){out.textContent="Erreur reseau: "+e.message}}async function login(){const email=document.getElementById("email").value.trim(),password=document.getElementById("password").value;if(!email||!password){out.textContent="Saisis email et mot de passe.";return}out.textContent="Connexion en cours...";try{const r=await fetch("/auth/login",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({email,password})});const d=await r.json();out.textContent="HTTP "+r.status+"\n"+JSON.stringify({ok:r.ok,user:d.user,message:d.message},null,2)}catch(e){out.textContent="Erreur reseau: "+e.message}}</script></body></html>';
+  }
+}
