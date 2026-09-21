@@ -1,5 +1,6 @@
 FROM node:18-alpine AS build
 WORKDIR /app
+RUN apk add --no-cache openssl
 
 COPY package*.json ./
 RUN npm ci --silent
@@ -9,6 +10,7 @@ RUN npm run prisma:generate && npm run build
 
 FROM node:18-alpine AS runtime
 WORKDIR /app
+RUN apk add --no-cache openssl
 
 COPY package*.json ./
 RUN npm ci --silent
