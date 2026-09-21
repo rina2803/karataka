@@ -10,6 +10,8 @@ import { AdminModule } from './admin/admin.module';
 import { PrismaService } from './prisma/prisma.service';
 import { HealthController } from './health.controller';
 import { MarketplaceModule } from './marketplace/marketplace.module';
+import { TestController } from './test.controller';
+
 
 @Module({
   imports: [
@@ -23,7 +25,7 @@ import { MarketplaceModule } from './marketplace/marketplace.module';
     AdminModule,
     MarketplaceModule,
   ],
-  controllers: [HealthController],
+  controllers: [HealthController, TestController],
   providers: [PrismaService],
 })
 export class AppModule {}
