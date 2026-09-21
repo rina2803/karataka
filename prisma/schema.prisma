@@ -1,12 +1,14 @@
 generator client {
   provider = "prisma-client-js"
-  binaryTargets = ["native", "debian-openssl-1.0.x"]
+  binaryTargets = ["native", "linux-musl-openssl-3.0.x", "debian-openssl-1.0.x"]
 }
+
 
 datasource db {
   provider = "sqlite"
   url      = env("DATABASE_URL")
 }
+
 
 model User {
   id                String                  @id @default(cuid())
@@ -27,6 +29,7 @@ model User {
   orders            MarketplaceOrder[]
 }
 
+
 model Product {
   id          String             @id @default(cuid())
   name        String
@@ -34,112 +37,3 @@ model Product {
   price       Decimal
   imageUrl    String?
   stock       Int                @default(0)
-  active      Boolean            @default(true)
-  category    String?            @default("general")
-  sellerName  String?            @default("Tsenabe officiel")
-  createdAt   DateTime           @default(now())
-  orders      MarketplaceOrder[]
-}
-
-model MarketplaceOrder {
-  id        String   @id @default(cuid())
-  product   Product  @relation(fields: [productId], references: [id])
-  productId String
-  user      User     @relation(fields: [userId], references: [id])
-  userId    String
-  amount    Decimal
-  status    String   @default("paid")
-  createdAt DateTime @default(now())
-}
-
-/// Demande de dépôt/retrait MVola manuelle (le joueur envoie l'argent lui-même
-/// via *111# vers le numéro caisse, indique une référence, puis un admin
-/// valide — crédite/débite alors réellement le portefeuille).
-model PaymentRequest {
-  id         String    @id @default(cuid())
-  user       User      @relation(fields: [userId], references: [id])
-  userId     String
-  type       String // deposit | withdraw
-  amount     Decimal
-  reference  String? // référence MVola ou note fournie par le joueur
-  phone      String?
-  status     String    @default("pending") // pending | approved | rejected
-  createdAt  DateTime  @default(now())
-  reviewedAt DateTime?
-  reviewedBy String?
-}
-
-model Wallet {
-  id      String        @id @default(cuid())
-  user    User?         @relation(fields: [userId], references: [id])
-  userId  String?       @unique
-  balance Decimal       @default("0")
-  txns    Transaction[]
-}
-
-model Transaction {
-  id        String   @id @default(cuid())
-  wallet    Wallet   @relation(fields: [walletId], references: [id])
-  walletId  String
-  amount    Decimal
-  type      String // deposit | withdraw | bet | payout | fee
-  meta      String?
-  createdAt DateTime @default(now())
-}
-
-model Game {
-  id        String   @id @default(cuid())
-  slug      String   @unique
-  name      String
-  createdAt DateTime @default(now())
-  matches   Match[]
-}
-
-model Match {
-  id        String       @id @default(cuid())
-  game      Game         @relation(fields: [gameId], references: [id])
-  gameId    String
-  state     String
-  betAmount Decimal      @default("0")
-  winnerId  String?
-  createdAt DateTime     @default(now())
-  players   GamePlayer[]
-}
-
-model GamePlayer {
-  id      String @id @default(cuid())
-  user    User   @relation(fields: [userId], references: [id])
-  userId  String
-  match   Match  @relation(fields: [matchId], references: [id])
-  matchId String
-  side    String
-}
-
-model Tournament {
-  id           String                  @id @default(cuid())
-  name         String
-  entryFee     Decimal
-  startsAt     DateTime
-  createdAt    DateTime                @default(now())
-  participants TournamentParticipant[]
-}
-
-model TournamentParticipant {
-  id           String     @id @default(cuid())
-  tournament   Tournament @relation(fields: [tournamentId], references: [id])
-  tournamentId String
-  user         User       @relation(fields: [userId], references: [id])
-  userId       String
-  joinedAt     DateTime   @default(now())
-
-  @@unique([tournamentId, userId])
-}
-
-model Message {
-  id        String   @id @default(cuid())
-  roomId    String
-  user      User     @relation(fields: [userId], references: [id])
-  userId    String
-  content   String
-  createdAt DateTime @default(now())
-}
