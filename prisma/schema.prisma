@@ -25,31 +25,165 @@ model User {
   paymentRequests   PaymentRequest[]
   tournamentEntries TournamentParticipant[]
   orders            MarketplaceOrder[]
+  productsForSale   Product[]
+  sellerApplications SellerApplication[]
+  cartOrders        CartOrder[]
+  /// Vrai si la dernière demande de vendeur a été validée par un admin —
+  /// condition pour pouvoir publier des annonces sur la boutique.
+  isApprovedSeller  Boolean                 @default(false)
 }
 
 model Product {
-  id          String             @id @default(cuid())
-  name        String
-  description String?
-  price       Decimal
-  imageUrl    String?
-  stock       Int                @default(0)
-  active      Boolean            @default(true)
-  category    String?            @default("general")
-  sellerName  String?            @default("Tsenabe officiel")
+  id            String             @id @default(cuid())
+  name          String
+  description   String?
+  price         Decimal
+  /// Prix barré affiché quand `isPromo` est vrai (ex-prix avant réduction).
+  originalPrice Decimal?
+  isPromo       Boolean            @default(false)
+  imageUrl      String?
+  stock         Int                @default(0)
+  active        Boolean            @default(true)
+  category      String?            @default("general")
+  sellerName    String?            @default("Tsenabe officiel")
+  /// Vendeur réel (marketplace multi-vendeur) — `null` pour les produits
+  /// officiels historiques (sellerName sert alors d'affichage seul).
+  sellerId    String?
+  seller      User?              @relation(fields: [sellerId], references: [id])
   createdAt   DateTime           @default(now())
   orders      MarketplaceOrder[]
+  cartItems   CartOrderItem[]
 }
 
 model MarketplaceOrder {
-  id        String   @id @default(cuid())
-  product   Product  @relation(fields: [productId], references: [id])
+  id               String   @id @default(cuid())
+  product          Product  @relation(fields: [productId], references: [id])
+  productId        String
+  user             User     @relation(fields: [userId], references: [id])
+  userId           String
+  amount           Decimal
+  /// Commission plateforme prélevée sur cette vente (5 % du montant), déjà
+  /// déduite du virement reçu par le vendeur.
+  commissionAmount Decimal  @default("0")
+  status           String   @default("paid")
+  createdAt        DateTime @default(now())
+}
+
+/// Dossier de candidature vendeur : CIN + photo CIN + selfie avec CIN +
+/// numéro MVola. Un admin valide/refuse avant que le compte ne puisse
+/// publier des annonces (`User.isApprovedSeller`).
+model SellerApplication {
+  id           String    @id @default(cuid())
+  user         User      @relation(fields: [userId], references: [id])
+  userId       String
+  cinNumber    String
+  cinPhotoUrl  String
+  selfieUrl    String
+  mvolaNumber  String
+  status       String    @default("pending") // pending | approved | rejected
+  reviewNote   String?
+  createdAt    DateTime  @default(now())
+  reviewedAt   DateTime?
+}
+
+/// Commande panier boutique : plusieurs articles + livraison, en attente de
+/// validation admin avant débit réel du portefeuille (même logique de
+/// confiance que les demandes de paiement MVola manuelles).
+model CartOrder {
+  id               String          @id @default(cuid())
+  user             User            @relation(fields: [userId], references: [id])
+  userId           String
+  deliveryName     String
+  deliveryPhone    String
+  deliveryAddress  String
+  deliveryCity     String
+  deliveryFee      Decimal
+  itemsTotal       Decimal
+  commissionAmount Decimal         @default("0")
+  status           String          @default("pending") // pending | approved | rejected
+  reviewNote       String?
+  createdAt        DateTime        @default(now())
+  reviewedAt       DateTime?
+  items            CartOrderItem[]
+}
+
+model CartOrderItem {
+  id        String    @id @default(cuid())
+  order     CartOrder @relation(fields: [orderId], references: [id])
+  orderId   String
+  product   Product   @relation(fields: [productId], references: [id])
   productId String
-  user      User     @relation(fields: [userId], references: [id])
+  quantity  Int
+  unitPrice Decimal
+  sellerId  String?
+}
+
+/// Lot d'enchère — géré exclusivement par un admin. Aucune donnée fictive :
+/// tant qu'aucun lot n'existe, l'écran Enchères affiche « à bientôt ».
+model AuctionLot {
+  id              String       @id @default(cuid())
+  title           String
+  description     String?
+  imageUrl        String?
+  startingBid     Decimal
+  currentBid      Decimal
+  currentBidderId String?
+  status          String       @default("active") // active | ended
+  endsAt          DateTime
+  createdAt       DateTime     @default(now())
+  bids            AuctionBid[]
+}
+
+model AuctionBid {
+  id        String     @id @default(cuid())
+  lot       AuctionLot @relation(fields: [lotId], references: [id])
+  lotId     String
   userId    String
   amount    Decimal
-  status    String   @default("paid")
+  createdAt DateTime   @default(now())
+}
+
+/// Contenu de la Foire (ventes flash / stands) — géré par un admin. Vide par
+/// défaut : l'écran affiche « pas encore d'événement » tant qu'aucun n'existe.
+model FairEvent {
+  id            String    @id @default(cuid())
+  title         String
+  description   String?
+  imageUrl      String?
+  price         Decimal
+  originalPrice Decimal?
+  stock         Int       @default(0)
+  category      String    @default("flash") // flash | stand
+  active        Boolean   @default(true)
+  startsAt      DateTime?
+  endsAt        DateTime?
+  createdAt     DateTime  @default(now())
+}
+
+/// Bannière publicitaire de l'accueil — 100 % gérée par l'admin ; l'écran
+/// n'affiche rien tant qu'aucune bannière active n'existe.
+model HomeBanner {
+  id        String   @id @default(cuid())
+  title     String
+  imageUrl  String
+  linkType  String? // 'tab' | 'url'
+  linkValue String?
+  active    Boolean  @default(true)
+  sortOrder Int      @default(0)
   createdAt DateTime @default(now())
+}
+
+/// Version d'application publiée — sert la mise à jour in-app (l'app compare
+/// sa version locale à la plus récente ici et propose le téléchargement).
+model AppRelease {
+  id          String   @id @default(cuid())
+  platform    String   @default("android")
+  version     String
+  buildNumber Int
+  apkUrl      String
+  notes       String?
+  mandatory   Boolean  @default(false)
+  createdAt   DateTime @default(now())
 }
 
 /// Demande de dépôt/retrait MVola manuelle (le joueur envoie l'argent lui-même
@@ -116,12 +250,35 @@ model GamePlayer {
 }
 
 model Tournament {
-  id           String                  @id @default(cuid())
-  name         String
-  entryFee     Decimal
-  startsAt     DateTime
-  createdAt    DateTime                @default(now())
-  participants TournamentParticipant[]
+  id               String                  @id @default(cuid())
+  name             String
+  entryFee         Decimal
+  startsAt         DateTime
+  createdAt        DateTime                @default(now())
+  /// Le bracket (rounds + horaires) n'est généré qu'une fois, sur demande —
+  /// évite de re-tirer au sort les paires à chaque consultation.
+  bracketGenerated Boolean                 @default(false)
+  participants     TournamentParticipant[]
+  matches          TournamentMatch[]
+}
+
+/// Une confrontation du bracket : ronde, deux joueurs (ou une place vacante
+/// « bye »/à déterminer), horaire prévu et résultat une fois joué.
+model TournamentMatch {
+  id           String     @id @default(cuid())
+  tournament   Tournament @relation(fields: [tournamentId], references: [id])
+  tournamentId String
+  round        Int
+  /// Position dans la ronde — sert à retrouver le match suivant du bracket
+  /// (position `i` de la ronde `r` alimente la position `i/2` de `r+1`).
+  position     Int
+  player1Id    String?
+  player2Id    String?
+  winnerId     String?
+  scheduledAt  DateTime
+  status       String     @default("scheduled") // scheduled | done
+
+  @@unique([tournamentId, round, position])
 }
 
 model TournamentParticipant {

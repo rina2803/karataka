@@ -499,22 +499,32 @@ export class RealtimeGateway implements OnGatewayConnection, OnGatewayDisconnect
     if (data.winnerId && !room.players.has(data.winnerId)) return { error: 'Invalid winner' };
     if (data.winnerId === userId) return { error: 'Winner cannot be the reporter' };
 
+    await this.finishGame(room, data.winnerId, data.reason);
+    return { ok: true };
+  }
+
+  /**
+   * Clôture une partie (une seule fois) : enregistre le résultat, règle les
+   * mises et prévient les deux joueurs.
+   */
+  private async finishGame(room: ChessRoom, winnerId: string | null, reason: string) {
+    if (room.status !== 'playing') return;
+    room.status = 'finished';
     if (room.matchId) {
       await this.prisma.match.update({
         where: { id: room.matchId },
         data: {
-          state: JSON.stringify({ fen: room.fen, turn: room.turn, status: 'finished', reason: data.reason }),
-          winnerId: data.winnerId,
+          state: JSON.stringify({ fen: room.fen, turn: room.turn, status: 'finished', reason }),
+          winnerId,
         },
       });
     }
 
-    room.status = 'finished';
     let payout: { fee: string; payout: string } | null = null;
 
     if (room.stake > 0 && room.betsPlaced) {
-      if (data.winnerId) {
-        payout = await this.wallet.distributePayouts(data.winnerId, String(room.stake * 2));
+      if (winnerId) {
+        payout = await this.wallet.distributePayouts(winnerId, String(room.stake * 2));
       } else {
         // Nulle : chacun récupère sa mise, sans commission.
         for (const id of [room.whiteId, room.blackId]) {
@@ -524,12 +534,11 @@ export class RealtimeGateway implements OnGatewayConnection, OnGatewayDisconnect
     }
 
     this.server.to(this.roomChannel(room.id)).emit('chess:game-ended', {
-      winnerId: data.winnerId,
-      reason: data.reason,
+      winnerId,
+      reason,
       stake: room.stake,
       payout: payout ? Number(payout.payout) : null,
     });
-    return { ok: true };
   }
 
   @SubscribeMessage('chess:move')
@@ -547,6 +556,15 @@ export class RealtimeGateway implements OnGatewayConnection, OnGatewayDisconnect
     if (!isWhite && !isBlack) return { error: 'Not a player' };
     if (data.turn !== room.turn || (data.turn === 'w' && !isWhite) || (data.turn === 'b' && !isBlack)) {
       return { error: 'Not your turn' };
+    }
+
+    // Drapeau tombé : le serveur fait foi, le coup joué trop tard ne compte pas.
+    if (room.timeControlSeconds > 0 && room.turnStartedAt) {
+      const remaining = data.turn === 'w' ? room.whiteTimeMs : room.blackTimeMs;
+      if (Date.now() - room.turnStartedAt > remaining + 1000) {
+        await this.finishGame(room, isWhite ? room.blackId : room.whiteId, 'timeout');
+        return { error: 'Time out' };
+      }
     }
 
     const game = new Chess(room.fen);
@@ -586,6 +604,14 @@ export class RealtimeGateway implements OnGatewayConnection, OnGatewayDisconnect
       blackTimeMs: room.blackTimeMs,
       turnStartedAt: room.turnStartedAt,
     });
+
+    // Fin de partie détectée par le serveur : ne dépend plus du client (le
+    // vainqueur ne peut pas se déclarer lui-même via chess:game-over).
+    if (game.isCheckmate()) {
+      await this.finishGame(room, userId, 'checkmate');
+    } else if (game.isGameOver()) {
+      await this.finishGame(room, null, 'draw');
+    }
     return { ok: true };
   }
 

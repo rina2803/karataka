@@ -4,12 +4,13 @@
   "private": true,
   "main": "dist/main.js",
   "scripts": {
-    "start": "node dist/main.js",
+    "start": "node scripts/start.js",
     "start:dev": "node ./node_modules/ts-node-dev/lib/bin.js --respawn --transpile-only src/main.ts",
-    "build": "npx tsc -p tsconfig.build.json",
-    "prisma:generate": "npx prisma generate",
+    "build": "node scripts/prisma-provider.js && prisma generate && tsc -p tsconfig.build.json",
+    "prisma:generate": "node scripts/prisma-provider.js && prisma generate",
     "prisma:migrate": "npx prisma migrate dev",
-    "seed": "npx ts-node src/seed.ts"
+    "seed": "npx ts-node src/seed.ts",
+    "db:push": "node scripts/prisma-provider.js && prisma db push"
   },
   "dependencies": {
     "@nestjs/common": "^9.0.0",
@@ -18,6 +19,7 @@
     "@nestjs/platform-socket.io": "^9.4.3",
     "@nestjs/websockets": "^9.0.0",
     "@prisma/client": "^5.0.0",
+    "@types/node": "^20.0.0",
     "axios": "^1.0.0",
     "bcryptjs": "^2.4.3",
     "chess.js": "^1.4.0",
@@ -25,15 +27,14 @@
     "class-validator": "^0.14.0",
     "dotenv": "^16.0.0",
     "jsonwebtoken": "^9.0.0",
+    "prisma": "^5.0.0",
     "socket.io": "^4.0.0",
-    "stripe": "^12.0.0"
+    "stripe": "^12.0.0",
+    "typescript": "^5.0.0"
   },
   "devDependencies": {
     "@types/bcryptjs": "^2.4.2",
-    "@types/node": "^20.0.0",
-    "prisma": "^5.0.0",
     "ts-node": "^10.0.0",
-    "ts-node-dev": "^2.0.0",
-    "typescript": "^5.0.0"
+    "ts-node-dev": "^2.0.0"
   }
 }

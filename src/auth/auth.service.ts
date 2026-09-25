@@ -21,8 +21,13 @@ export class AuthService {
     return user;
   }
 
-  async validateUser(email: string, pass: string) {
-    const user = await this.prisma.user.findUnique({ where: { email } });
+  /// `identifier` accepte un email ou un numéro de téléphone — la connexion
+  /// fonctionne avec l'un ou l'autre sans changer le contrat de l'API.
+  async validateUser(identifier: string, pass: string) {
+    const value = identifier.trim();
+    const user = await this.prisma.user.findFirst({
+      where: value.includes('@') ? { email: value } : { phone: value },
+    });
     if (!user) return null;
     const match = await bcrypt.compare(pass, user.password);
     if (!match) return null;

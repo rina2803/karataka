@@ -1,0 +1,31 @@
+# Déploiement gratuit sur Render (Blueprint). Base de données : PostgreSQL
+# gratuit Neon (https://neon.tech) — collez son URL dans DATABASE_URL.
+# Sans DATABASE_URL Postgres, repli sur SQLite dans /tmp (données effacées
+# à chaque redémarrage du service gratuit).
+services:
+  - type: web
+    name: lalao-karataka-backend-test
+    runtime: node
+    plan: free
+    region: frankfurt
+    buildCommand: npm ci --include=dev && npm run build
+    startCommand: npm start
+    healthCheckPath: /health
+    autoDeploy: true
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: DATABASE_URL
+        sync: false
+      - key: CORS_ORIGIN
+        value: "*"
+      - key: JWT_SECRET
+        generateValue: true
+      - key: SEED_PASSWORD
+        sync: false
+      - key: ADMIN_EMAIL
+        value: admin@lalao.test
+      - key: ADMIN_USERNAME
+        value: admin
+      - key: ADMIN_PASSWORD
+        sync: false

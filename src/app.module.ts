@@ -11,7 +11,12 @@ import { PrismaService } from './prisma/prisma.service';
 import { HealthController } from './health.controller';
 import { MarketplaceModule } from './marketplace/marketplace.module';
 import { TestController } from './test.controller';
-
+import { AuctionModule } from './auction/auction.module';
+import { FairModule } from './fair/fair.module';
+import { SellerModule } from './seller/seller.module';
+import { CartModule } from './cart/cart.module';
+import { HomeModule } from './home/home.module';
+import { AppReleaseModule } from './app-release/app-release.module';
 
 @Module({
   imports: [
@@ -24,6 +29,12 @@ import { TestController } from './test.controller';
     MessagesModule,
     AdminModule,
     MarketplaceModule,
+    AuctionModule,
+    FairModule,
+    SellerModule,
+    CartModule,
+    HomeModule,
+    AppReleaseModule,
   ],
   controllers: [HealthController, TestController],
   providers: [PrismaService],

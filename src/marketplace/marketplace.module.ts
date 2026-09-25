@@ -4,9 +4,10 @@ import { MarketplaceService } from './marketplace.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { WalletModule } from '../wallet/wallet.module';
 import { AuthModule } from '../auth/auth.module';
+import { UsersModule } from '../users/users.module';
 
 @Module({
-  imports: [WalletModule, AuthModule],
+  imports: [WalletModule, AuthModule, UsersModule],
   controllers: [MarketplaceController],
   providers: [MarketplaceService, PrismaService],
 })

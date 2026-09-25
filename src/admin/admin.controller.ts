@@ -105,18 +105,32 @@ export class AdminController {
   }
 
   @Post('products')
-  createProduct(@Body() body: { name: string; description?: string; price: number; stock: number; imageUrl?: string; category?: string; sellerName?: string }) {
-    return this.prisma.product.create({ data: { name: body.name.trim(), description: body.description?.trim(), price: String(body.price), stock: Number(body.stock), imageUrl: body.imageUrl?.trim(), category: body.category?.trim() || 'general', sellerName: body.sellerName?.trim() || 'Tsenabe officiel' } });
+  createProduct(@Body() body: { name: string; description?: string; price: number; originalPrice?: number; isPromo?: boolean; stock: number; imageUrl?: string; category?: string; sellerName?: string }) {
+    return this.prisma.product.create({
+      data: {
+        name: body.name.trim(),
+        description: body.description?.trim(),
+        price: String(body.price),
+        originalPrice: body.originalPrice !== undefined && body.originalPrice !== null ? String(body.originalPrice) : undefined,
+        isPromo: body.isPromo ?? false,
+        stock: Number(body.stock),
+        imageUrl: body.imageUrl?.trim(),
+        category: body.category?.trim() || 'general',
+        sellerName: body.sellerName?.trim() || 'Tsenabe officiel',
+      },
+    });
   }
 
   @Put('products/:id')
-  updateProduct(@Param('id') id: string, @Body() body: { name?: string; description?: string; price?: number; stock?: number; imageUrl?: string; category?: string; sellerName?: string; active?: boolean }) {
+  updateProduct(@Param('id') id: string, @Body() body: { name?: string; description?: string; price?: number; originalPrice?: number; isPromo?: boolean; stock?: number; imageUrl?: string; category?: string; sellerName?: string; active?: boolean }) {
     return this.prisma.product.update({
       where: { id },
       data: {
         ...(body.name !== undefined ? { name: body.name.trim() } : {}),
         ...(body.description !== undefined ? { description: body.description.trim() } : {}),
         ...(body.price !== undefined ? { price: String(body.price) } : {}),
+        ...(body.originalPrice !== undefined ? { originalPrice: body.originalPrice === null ? null : String(body.originalPrice) } : {}),
+        ...(body.isPromo !== undefined ? { isPromo: body.isPromo } : {}),
         ...(body.stock !== undefined ? { stock: Number(body.stock) } : {}),
         ...(body.imageUrl !== undefined ? { imageUrl: body.imageUrl.trim() || null } : {}),
         ...(body.category !== undefined ? { category: body.category.trim() || 'general' } : {}),

@@ -16,7 +16,8 @@ COPY package*.json ./
 RUN npm ci --silent
 COPY --from=build /app/dist ./dist
 COPY --from=build /app/prisma ./prisma
+COPY --from=build /app/scripts ./scripts
 RUN npm run prisma:generate
 
 EXPOSE 3000
-CMD ["sh", "-c", "npx prisma migrate deploy || echo 'Prisma migrations failed; continuing so /health remains available'; node dist/main.js"]
+CMD ["npm", "start"]
