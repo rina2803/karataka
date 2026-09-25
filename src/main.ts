@@ -3,6 +3,7 @@ import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
 import { PrismaService } from './prisma/prisma.service';
 import * as bcrypt from 'bcryptjs';
+import { OFFICIAL_SELLER_NAME, SEED_PRODUCTS, SEED_SELLERS } from './seed-catalog';
 
 const TEST_PLAYERS = [
   { username: 'seeduser', email: 'seed@lalao.test', displayName: 'Rangy (Test)', avatarColor: '#2E9BEA' },
@@ -16,19 +17,15 @@ const TEST_PLAYERS = [
   { username: 'koto', email: 'koto@lalao.test', displayName: 'Koto', avatarColor: '#1ABC9C' },
 ];
 
-const DEFAULT_PRODUCTS = [
-  { name: 'T-shirt Lalao & Karataka', description: 'T-shirt officiel du jeu.', price: 25000, stock: 20, category: 'Vêtements', sellerName: 'Tsenabe officiel', imageUrl: 'https://images.unsplash.com/photo-1521572163474-6864f9cf17ab?w=640&q=85' },
-  { name: 'Casquette L&K', description: 'Casquette officielle bleu électrique.', price: 18000, stock: 15, category: 'Accessoires', sellerName: 'Tsenabe officiel', imageUrl: 'https://images.unsplash.com/photo-1521369909029-2afed882baee?w=640&q=85' },
-  { name: 'Mug Tsenabe', description: 'Mug collector pour les joueurs.', price: 12000, stock: 30, category: 'Maison', sellerName: 'Tsenabe officiel', imageUrl: 'https://images.unsplash.com/photo-1514228569937-3a99e9862c94?w=640&q=85' },
-  { name: 'Sac à dos Karataka Sport', description: 'Sac à dos résistant, compartiment laptop.', price: 32000, stock: 25, category: 'Accessoires', sellerName: 'Tsenabe officiel', imageUrl: 'https://images.unsplash.com/photo-1553062407-98eeb64c6a62?w=640&q=85' },
-  { name: 'Jeu d\'échecs de voyage', description: 'Set pliable magnétique, idéal en déplacement.', price: 28000, originalPrice: 38000, isPromo: true, stock: 18, category: 'Accessoires', sellerName: 'Tsenabe officiel', imageUrl: 'https://images.unsplash.com/photo-1528819622765-d6bcf132ac11?w=640&q=85' },
-  { name: 'Pizza Margherita Familiale', description: 'Pâte fine, mozzarella, basilic frais — grand format.', price: 25000, stock: 40, category: 'Repas', sellerName: 'Gastronomie Pizza', imageUrl: 'https://images.unsplash.com/photo-1548365328-9f547fb0953b?w=640&q=85' },
-  { name: 'Burger Deluxe Karataka', description: 'Bœuf, cheddar, sauce maison, frites incluses.', price: 15000, stock: 35, category: 'Repas', sellerName: 'Burger House Tana', imageUrl: 'https://images.unsplash.com/photo-1568901346375-23c9450c58cd?w=640&q=85' },
-  { name: 'Poulet Rôti Malagasy', description: 'Poulet fermier mariné aux épices locales, riz inclus.', price: 20000, stock: 20, category: 'Repas', sellerName: 'Chicken Tana', imageUrl: 'https://images.unsplash.com/photo-1598103442097-8b74394b95c6?w=640&q=85' },
-  { name: 'Panier Essentiels Carrefour', description: 'Riz, huile, sucre et conserves — panier famille.', price: 45000, originalPrice: 55000, isPromo: true, stock: 30, category: 'Épicerie', sellerName: 'Carrefour Madagascar', imageUrl: 'https://images.unsplash.com/photo-1542838132-92c53300491e?w=640&q=85' },
-  { name: 'Crème Hydratante Malagasy', description: 'Beurre de karité et huiles locales, tous types de peau.', price: 18000, stock: 22, category: 'Beauté', sellerName: 'Beauté Naturelle Tana', imageUrl: 'https://images.unsplash.com/photo-1556228720-195a672e8a03?w=640&q=85' },
-  { name: 'Huile de Coco Bio', description: 'Pressée à froid, cheveux et peau.', price: 12000, stock: 28, category: 'Beauté', sellerName: 'Sambatra Cosmetics', imageUrl: 'https://images.unsplash.com/photo-1611080626919-7cf5a9dbab5b?w=640&q=85' },
-  { name: 'Kit Manucure Complet', description: 'Set professionnel 12 pièces avec étui.', price: 20000, stock: 15, category: 'Beauté', sellerName: 'Glam Studio', imageUrl: 'https://images.unsplash.com/photo-1522337360788-8b13dee7a37e?w=640&q=85' },
+/// Anciens articles de démo remplacés par le catalogue multi-vendeurs
+/// (images cassées ou vendeurs fictifs) : masqués au démarrage.
+const LEGACY_DEMO_PRODUCTS = [
+  'Pizza Margherita Familiale',
+  'Poulet Rôti Malagasy',
+  'Panier Essentiels Carrefour',
+  'Crème Hydratante Malagasy',
+  'Huile de Coco Bio',
+  'Kit Manucure Complet',
 ];
 
 async function ensureTestPlayers(prisma: PrismaService) {
@@ -85,11 +82,51 @@ async function ensureAdminUser(prisma: PrismaService) {
   console.log(`\nCompte admin créé : ${email} / ${password}\n`);
 }
 
-async function ensureDefaultProducts(prisma: PrismaService) {
-  for (const product of DEFAULT_PRODUCTS) {
-    const existing = await prisma.product.findFirst({ where: { name: product.name } });
-    if (!existing) await prisma.product.create({ data: product });
+async function ensureSeedSellers(prisma: PrismaService) {
+  const hashed = await bcrypt.hash(process.env.SEED_PASSWORD || 'Password123', 10);
+  const ids = new Map<string, { id: string; displayName: string }>();
+  for (const seller of SEED_SELLERS) {
+    let user = await prisma.user.findUnique({ where: { username: seller.username } });
+    if (!user) {
+      user = await prisma.user.create({
+        data: { ...seller, password: hashed, isApprovedSeller: true, wallet: { create: { balance: 0 } } },
+      });
+    } else if (!user.isApprovedSeller) {
+      user = await prisma.user.update({ where: { id: user.id }, data: { isApprovedSeller: true } });
+    }
+    ids.set(seller.username, { id: user.id, displayName: seller.displayName });
   }
+  return ids;
+}
+
+async function ensureDefaultProducts(prisma: PrismaService) {
+  const sellers = await ensureSeedSellers(prisma);
+  for (const { seller, originalPrice, ...product } of SEED_PRODUCTS) {
+    const owner = seller ? sellers.get(seller) : undefined;
+    const data = {
+      ...product,
+      price: String(product.price),
+      originalPrice: originalPrice ? String(originalPrice) : null,
+      isPromo: !!originalPrice,
+      sellerId: owner?.id ?? null,
+      sellerName: owner?.displayName ?? OFFICIAL_SELLER_NAME,
+    };
+    const existing = await prisma.product.findFirst({ where: { name: product.name } });
+    if (!existing) {
+      await prisma.product.create({ data });
+    } else if (!existing.sellerId || existing.sellerId === owner?.id) {
+      // Article de démo déjà présent : on corrige photo et vendeur, sans
+      // toucher au stock ni au prix éventuellement modifiés depuis.
+      await prisma.product.update({
+        where: { id: existing.id },
+        data: { imageUrl: data.imageUrl, sellerId: data.sellerId, sellerName: data.sellerName, category: data.category },
+      });
+    }
+  }
+  await prisma.product.updateMany({
+    where: { name: { in: LEGACY_DEMO_PRODUCTS }, sellerId: null },
+    data: { active: false },
+  });
 }
 
 function parseAllowedOrigins(): string[] {

@@ -3,6 +3,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { WalletService } from '../wallet/wallet.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { AdminGuard } from '../auth/admin.guard';
+import { fallbackProductImage } from '../seed-catalog';
 
 @Controller('admin')
 @UseGuards(JwtAuthGuard, AdminGuard)
@@ -114,7 +115,8 @@ export class AdminController {
         originalPrice: body.originalPrice !== undefined && body.originalPrice !== null ? String(body.originalPrice) : undefined,
         isPromo: body.isPromo ?? false,
         stock: Number(body.stock),
-        imageUrl: body.imageUrl?.trim(),
+        // Toujours une photo : celle fournie, sinon l'image de la catégorie.
+        imageUrl: body.imageUrl?.trim() || fallbackProductImage(body.category?.trim()),
         category: body.category?.trim() || 'general',
         sellerName: body.sellerName?.trim() || 'Tsenabe officiel',
       },
@@ -132,7 +134,7 @@ export class AdminController {
         ...(body.originalPrice !== undefined ? { originalPrice: body.originalPrice === null ? null : String(body.originalPrice) } : {}),
         ...(body.isPromo !== undefined ? { isPromo: body.isPromo } : {}),
         ...(body.stock !== undefined ? { stock: Number(body.stock) } : {}),
-        ...(body.imageUrl !== undefined ? { imageUrl: body.imageUrl.trim() || null } : {}),
+        ...(body.imageUrl !== undefined ? { imageUrl: body.imageUrl.trim() || fallbackProductImage(body.category?.trim()) } : {}),
         ...(body.category !== undefined ? { category: body.category.trim() || 'general' } : {}),
         ...(body.sellerName !== undefined ? { sellerName: body.sellerName.trim() || 'Tsenabe officiel' } : {}),
         ...(body.active !== undefined ? { active: body.active } : {}),

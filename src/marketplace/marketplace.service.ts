@@ -1,5 +1,6 @@
 import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { fallbackProductImage } from '../seed-catalog';
 
 /// Commission plateforme sur les ventes entre joueurs (produits avec un
 /// `sellerId` réel) — les produits officiels (sellerId null) n'en paient pas,
@@ -9,7 +10,7 @@ const MARKETPLACE_COMMISSION_RATE = 0.05;
 const DEFAULT_PRODUCTS = [
   { id: 'tsenabe-tshirt', name: 'T-shirt Lalao & Karataka', description: 'T-shirt officiel du jeu.', price: 25000, stock: 20, category: 'Vêtements', sellerName: 'Tsenabe officiel', imageUrl: 'https://images.unsplash.com/photo-1521572163474-6864f9cf17ab?w=640&q=85', active: true },
   { id: 'tsenabe-cap', name: 'Casquette L&K', description: 'Casquette officielle bleu électrique.', price: 18000, stock: 15, category: 'Accessoires', sellerName: 'Tsenabe officiel', imageUrl: 'https://images.unsplash.com/photo-1521369909029-2afed882baee?w=640&q=85', active: true },
-  { id: 'tsenabe-mug', name: 'Mug Tsenabe', description: 'Mug collector pour les joueurs.', price: 12000, stock: 30, category: 'Maison', sellerName: 'Tsenabe officiel', imageUrl: 'https://images.unsplash.com/photo-1514228742587-6b1558feca88?w=640&q=85', active: true },
+  { id: 'tsenabe-mug', name: 'Mug Tsenabe', description: 'Mug collector pour les joueurs.', price: 12000, stock: 30, category: 'Maison', sellerName: 'Tsenabe officiel', imageUrl: 'https://images.unsplash.com/photo-1544787219-7f47ccb76574?w=640&q=85', active: true },
 ];
 
 @Injectable()
@@ -25,7 +26,9 @@ export class MarketplaceService {
       orderBy: { createdAt: 'desc' },
       include: { seller: { select: { id: true, username: true, displayName: true, avatarColor: true } } },
     });
-    if (products.length > 0) return products;
+    if (products.length > 0) {
+      return products.map((product) => ({ ...product, imageUrl: product.imageUrl || fallbackProductImage(product.category) }));
+    }
     return category ? DEFAULT_PRODUCTS.filter((product) => product.category === category) : DEFAULT_PRODUCTS;
   }
 
@@ -46,6 +49,8 @@ export class MarketplaceService {
     if (!name) throw new BadRequestException('Le nom du produit est requis');
     if (!Number.isFinite(price) || price <= 0) throw new BadRequestException('Le prix doit être supérieur à 0');
     if (!Number.isFinite(stock) || stock < 0) throw new BadRequestException('Le stock ne peut pas être négatif');
+    const imageUrl = body.imageUrl?.trim();
+    if (!imageUrl || !/^https?:\/\//.test(imageUrl)) throw new BadRequestException('Ajoute une photo du produit (lien http/https)');
 
     const seller = await this.prisma.user.findUnique({
       where: { id: sellerId },
@@ -62,7 +67,7 @@ export class MarketplaceService {
         description: body.description?.trim() || null,
         price: String(price),
         stock: Math.trunc(stock),
-        imageUrl: body.imageUrl?.trim() || null,
+        imageUrl,
         category: body.category?.trim() || 'general',
         sellerId,
         sellerName: seller.displayName || seller.username,
@@ -87,6 +92,9 @@ export class MarketplaceService {
     await this.assertOwnerOrAdmin(productId, userId, isAdmin);
     if (body.price !== undefined && Number(body.price) <= 0) throw new BadRequestException('Le prix doit être supérieur à 0');
     if (body.stock !== undefined && Number(body.stock) < 0) throw new BadRequestException('Le stock ne peut pas être négatif');
+    if (body.imageUrl !== undefined && !/^https?:\/\//.test(body.imageUrl.trim())) {
+      throw new BadRequestException('Un produit doit garder une photo (lien http/https)');
+    }
 
     return this.prisma.product.update({
       where: { id: productId },
@@ -95,7 +103,7 @@ export class MarketplaceService {
         ...(body.description !== undefined ? { description: body.description.trim() || null } : {}),
         ...(body.price !== undefined ? { price: String(Number(body.price)) } : {}),
         ...(body.stock !== undefined ? { stock: Math.trunc(Number(body.stock)) } : {}),
-        ...(body.imageUrl !== undefined ? { imageUrl: body.imageUrl.trim() || null } : {}),
+        ...(body.imageUrl !== undefined ? { imageUrl: body.imageUrl.trim() } : {}),
         ...(body.category !== undefined ? { category: body.category.trim() || 'general' } : {}),
         ...(body.active !== undefined ? { active: !!body.active } : {}),
       },
