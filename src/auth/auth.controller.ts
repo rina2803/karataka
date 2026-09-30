@@ -8,14 +8,26 @@ export class AuthController {
 
   @Post('register')
   async register(@Body() body: { username: string; email: string; phone: string; password: string }) {
-    try {
-      if (!body.phone?.trim()) throw new Error('Phone is required');
-      const user = await this.auth.register(body);
-      const token = this.auth.signToken(user.id);
-      return { ok: true, token, user: this.users.toPublic(user as any) };
-    } catch (err) {
-      throw new HttpException('Registration failed', HttpStatus.BAD_REQUEST);
+    const username = body.username?.trim() ?? '';
+    const email = body.email?.trim().toLowerCase() ?? '';
+    const phone = (body.phone ?? '').replace(/\s+/g, '');
+    const password = body.password ?? '';
+    const invalid = (message: string) => new HttpException(message, HttpStatus.BAD_REQUEST);
+
+    if (!/^[\p{L}\d_.-]{3,20}$/u.test(username)) throw invalid('Pseudo : 3 à 20 lettres ou chiffres, sans espace.');
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) throw invalid('Adresse email invalide.');
+    if (!/^(\+261|0)3[2-9]\d{7}$/.test(phone)) throw invalid('Numéro invalide (ex : 034 12 345 67).');
+    if (password.length < 6) throw invalid('Mot de passe : 6 caractères minimum.');
+
+    const taken = await this.users.findTaken({ username, email, phone });
+    if (taken) {
+      const label = { username: 'Ce pseudo', email: 'Cet email', phone: 'Ce numéro' }[taken];
+      throw new HttpException(`${label} est déjà utilisé.`, HttpStatus.CONFLICT);
     }
+
+    const user = await this.auth.register({ username, email, phone, password });
+    const token = this.auth.signToken(user.id);
+    return { ok: true, token, user: this.users.toPublic(user as any) };
   }
 
   @Post('forgot-password')

@@ -20,6 +20,16 @@ interface CheckoutBody {
   deliveryAddress: string;
   deliveryCity: string;
   supplierCount?: number;
+  deliveryLat?: number;
+  deliveryLng?: number;
+}
+
+/// Position GPS gardée seulement si elle est plausible.
+function validPosition(lat?: number, lng?: number) {
+  const la = Number(lat);
+  const lo = Number(lng);
+  if (!Number.isFinite(la) || !Number.isFinite(lo) || Math.abs(la) > 90 || Math.abs(lo) > 180) return {};
+  return { deliveryLat: la, deliveryLng: lo };
 }
 
 @Injectable()
@@ -75,6 +85,7 @@ export class CartService {
           deliveryPhone,
           deliveryAddress,
           deliveryCity,
+          ...validPosition(body.deliveryLat, body.deliveryLng),
           deliveryFee: String(deliveryFee),
           itemsTotal: String(itemsTotal),
           commissionAmount: String(commissionAmount),
@@ -120,24 +131,29 @@ export class CartService {
         }
       }
 
+      // Payée par le portefeuille si le solde suffit, sinon paiement à la
+      // livraison (le responsable a appelé le client avant de valider).
       const total = Number(order.itemsTotal) + Number(order.deliveryFee);
       const wallet = await tx.wallet.findUnique({ where: { userId: order.userId } });
-      if (!wallet) throw new BadRequestException('Portefeuille de l\'acheteur introuvable');
-      const charged = await tx.wallet.updateMany({
-        where: { id: wallet.id, balance: { gte: total } },
-        data: { balance: { decrement: total } },
-      });
-      if (charged.count !== 1) {
-        throw new BadRequestException('Le client n\'a plus un solde suffisant pour cette commande');
+      const charged = wallet
+        ? await tx.wallet.updateMany({
+            where: { id: wallet.id, balance: { gte: total } },
+            data: { balance: { decrement: total } },
+          })
+        : { count: 0 };
+      const paidByWallet = charged.count === 1;
+      if (wallet && paidByWallet) {
+        await tx.transaction.create({
+          data: { walletId: wallet.id, amount: `-${total}`, type: 'cart_purchase', meta: JSON.stringify({ orderId: id }) },
+        });
       }
-      await tx.transaction.create({
-        data: { walletId: wallet.id, amount: `-${total}`, type: 'cart_purchase', meta: JSON.stringify({ orderId: id }) },
-      });
 
       for (const item of order.items) {
         await tx.product.update({ where: { id: item.productId }, data: { stock: { decrement: item.quantity } } });
 
-        if (item.sellerId) {
+        // Vendeurs crédités seulement pour un paiement par portefeuille ; à
+        // la livraison, l'encaissement se fait hors application.
+        if (item.sellerId && paidByWallet) {
           const lineTotal = Number(item.unitPrice) * item.quantity;
           const commission = Math.round(lineTotal * MARKETPLACE_COMMISSION_RATE);
           const payout = lineTotal - commission;
@@ -167,8 +183,15 @@ export class CartService {
         }
       }
 
-      await tx.cartOrder.update({ where: { id }, data: { status: 'approved', reviewedAt: new Date() } });
-      return { ok: true };
+      await tx.cartOrder.update({
+        where: { id },
+        data: {
+          status: 'approved',
+          reviewedAt: new Date(),
+          reviewNote: paidByWallet ? 'Payée par le portefeuille' : 'Paiement à la livraison',
+        },
+      });
+      return { ok: true, paidByWallet };
     });
   }
 

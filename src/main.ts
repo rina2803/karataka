@@ -1,5 +1,6 @@
 import 'dotenv/config';
 import { NestFactory } from '@nestjs/core';
+import { json, urlencoded } from 'express';
 import { AppModule } from './app.module';
 import { PrismaService } from './prisma/prisma.service';
 import * as bcrypt from 'bcryptjs';
@@ -142,6 +143,10 @@ function parseAllowedOrigins(): string[] {
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
+  // Photos envoyées en base64 (CIN, selfie, produits) : la limite par défaut
+  // de 100 Ko les refusait toutes.
+  app.use(json({ limit: '12mb' }));
+  app.use(urlencoded({ extended: true, limit: '12mb' }));
 
   const allowedOrigins = parseAllowedOrigins();
   app.enableCors({

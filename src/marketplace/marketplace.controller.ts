@@ -1,4 +1,5 @@
-import { Body, Controller, Delete, Get, Param, Patch, Post, Query, Req, UseGuards } from '@nestjs/common';
+import { Body, Controller, Delete, Get, NotFoundException, Param, Patch, Post, Query, Req, Res, UseGuards } from '@nestjs/common';
+import type { Response } from 'express';
 import { MarketplaceService } from './marketplace.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { UsersService } from '../users/users.service';
@@ -10,6 +11,16 @@ export class MarketplaceController {
   @Get('products')
   products(@Query('category') category?: string) {
     return this.marketplace.listProducts(category);
+  }
+
+  /// Photo envoyée par le vendeur depuis son téléphone.
+  @Get('products/:id/image')
+  async image(@Param('id') id: string, @Res() res: Response) {
+    const photo = await this.marketplace.productPhoto(id);
+    if (!photo) throw new NotFoundException('Photo introuvable');
+    res.setHeader('Content-Type', photo.mimeType);
+    res.setHeader('Cache-Control', 'public, max-age=86400');
+    res.send(Buffer.from(photo.data, 'base64'));
   }
 
   @Get('categories')
@@ -35,7 +46,7 @@ export class MarketplaceController {
   @Post('products')
   create(
     @Body()
-    body: { name: string; description?: string; price: number; stock: number; imageUrl?: string; category?: string },
+    body: { name: string; description?: string; price: number; stock: number; imageUrl?: string; imageBase64?: string; category?: string },
     @Req() req: any,
   ) {
     return this.marketplace.createProduct(req.user.sub, body);
@@ -46,7 +57,7 @@ export class MarketplaceController {
   async update(
     @Param('id') id: string,
     @Body()
-    body: { name?: string; description?: string; price?: number; stock?: number; imageUrl?: string; category?: string; active?: boolean },
+    body: { name?: string; description?: string; price?: number; stock?: number; imageUrl?: string; imageBase64?: string; category?: string; active?: boolean },
     @Req() req: any,
   ) {
     const isAdmin = await this.users.isAdmin(req.user.sub);

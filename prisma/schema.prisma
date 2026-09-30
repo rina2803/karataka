@@ -53,6 +53,16 @@ model Product {
   createdAt   DateTime           @default(now())
   orders      MarketplaceOrder[]
   cartItems   CartOrderItem[]
+  photo       ProductPhoto?
+}
+
+/// Photo envoyée depuis le téléphone du vendeur (base64), servie par
+/// GET /marketplace/products/:id/image — séparée pour ne pas alourdir les listes.
+model ProductPhoto {
+  productId String  @id
+  product   Product @relation(fields: [productId], references: [id])
+  mimeType  String  @default("image/jpeg")
+  data      String
 }
 
 model MarketplaceOrder {
@@ -97,6 +107,9 @@ model CartOrder {
   deliveryPhone    String
   deliveryAddress  String
   deliveryCity     String
+  /// Position GPS du client (optionnelle, « ma position actuelle »).
+  deliveryLat      Float?
+  deliveryLng      Float?
   deliveryFee      Decimal
   itemsTotal       Decimal
   commissionAmount Decimal         @default("0")

@@ -26,7 +26,9 @@ export class AuthService {
   async validateUser(identifier: string, pass: string) {
     const value = identifier.trim();
     const user = await this.prisma.user.findFirst({
-      where: value.includes('@') ? { email: value } : { phone: value },
+      where: value.includes('@')
+        ? { OR: [{ email: value }, { email: value.toLowerCase() }] }
+        : { phone: value.replace(/\s+/g, '') },
     });
     if (!user) return null;
     const match = await bcrypt.compare(pass, user.password);

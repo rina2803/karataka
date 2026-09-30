@@ -32,6 +32,29 @@ export class MarketplaceService {
     return category ? DEFAULT_PRODUCTS.filter((product) => product.category === category) : DEFAULT_PRODUCTS;
   }
 
+  productPhoto(productId: string) {
+    return this.prisma.productPhoto.findUnique({ where: { productId } });
+  }
+
+  /// Enregistre une photo base64 (« data:image/png;base64,... » accepté) et
+  /// renvoie le chemin public à mettre dans `imageUrl`.
+  private async savePhoto(productId: string, raw: string) {
+    const match = /^data:(image\/[a-z+]+);base64,(.*)$/s.exec(raw.trim());
+    const mimeType = match ? match[1] : 'image/jpeg';
+    const data = (match ? match[2] : raw).replace(/\s+/g, '');
+    if (data.length < 100 || data.length > 8_000_000) {
+      throw new BadRequestException('Photo invalide ou trop lourde (8 Mo max)');
+    }
+    await this.prisma.productPhoto.upsert({
+      where: { productId },
+      create: { productId, mimeType, data },
+      update: { mimeType, data },
+    });
+    const imageUrl = `/marketplace/products/${productId}/image?v=${Date.now()}`;
+    await this.prisma.product.update({ where: { id: productId }, data: { imageUrl } });
+    return imageUrl;
+  }
+
   async myProducts(sellerId: string) {
     return this.prisma.product.findMany({
       where: { sellerId },
@@ -41,7 +64,7 @@ export class MarketplaceService {
 
   async createProduct(
     sellerId: string,
-    body: { name: string; description?: string; price: number; stock: number; imageUrl?: string; category?: string },
+    body: { name: string; description?: string; price: number; stock: number; imageUrl?: string; imageBase64?: string; category?: string },
   ) {
     const name = body.name?.trim();
     const price = Number(body.price);
@@ -50,7 +73,8 @@ export class MarketplaceService {
     if (!Number.isFinite(price) || price <= 0) throw new BadRequestException('Le prix doit être supérieur à 0');
     if (!Number.isFinite(stock) || stock < 0) throw new BadRequestException('Le stock ne peut pas être négatif');
     const imageUrl = body.imageUrl?.trim();
-    if (!imageUrl || !/^https?:\/\//.test(imageUrl)) throw new BadRequestException('Ajoute une photo du produit (lien http/https)');
+    const hasLink = !!imageUrl && /^https?:\/\//.test(imageUrl);
+    if (!hasLink && !body.imageBase64) throw new BadRequestException('Ajoute une photo du produit');
 
     const seller = await this.prisma.user.findUnique({
       where: { id: sellerId },
@@ -61,19 +85,21 @@ export class MarketplaceService {
       throw new BadRequestException('Devenez vendeur validé avant de publier une annonce (CIN + selfie + numéro MVola à soumettre pour validation admin).');
     }
 
-    return this.prisma.product.create({
+    const product = await this.prisma.product.create({
       data: {
         name,
         description: body.description?.trim() || null,
         price: String(price),
         stock: Math.trunc(stock),
-        imageUrl,
+        imageUrl: hasLink ? imageUrl : null,
         category: body.category?.trim() || 'general',
         sellerId,
         sellerName: seller.displayName || seller.username,
         active: true,
       },
     });
+    if (!hasLink) product.imageUrl = await this.savePhoto(product.id, body.imageBase64!);
+    return product;
   }
 
   private async assertOwnerOrAdmin(productId: string, userId: string, isAdmin: boolean) {
@@ -87,12 +113,13 @@ export class MarketplaceService {
     productId: string,
     userId: string,
     isAdmin: boolean,
-    body: { name?: string; description?: string; price?: number; stock?: number; imageUrl?: string; category?: string; active?: boolean },
+    body: { name?: string; description?: string; price?: number; stock?: number; imageUrl?: string; imageBase64?: string; category?: string; active?: boolean },
   ) {
     await this.assertOwnerOrAdmin(productId, userId, isAdmin);
     if (body.price !== undefined && Number(body.price) <= 0) throw new BadRequestException('Le prix doit être supérieur à 0');
     if (body.stock !== undefined && Number(body.stock) < 0) throw new BadRequestException('Le stock ne peut pas être négatif');
-    if (body.imageUrl !== undefined && !/^https?:\/\//.test(body.imageUrl.trim())) {
+    if (body.imageBase64) await this.savePhoto(productId, body.imageBase64);
+    if (body.imageUrl !== undefined && !body.imageBase64 && !/^(https?:\/\/|\/marketplace\/products\/)/.test(body.imageUrl.trim())) {
       throw new BadRequestException('Un produit doit garder une photo (lien http/https)');
     }
 

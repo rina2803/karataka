@@ -49,6 +49,18 @@ export class UsersService {
     return user ? this.toPublic(user) : null;
   }
 
+  /// Premier champ déjà pris par un autre compte, pour un message précis.
+  async findTaken(data: { username: string; email: string; phone: string }) {
+    const existing = await this.prisma.user.findFirst({
+      where: { OR: [{ username: data.username }, { email: data.email }, { phone: data.phone }] },
+      select: { username: true, email: true, phone: true },
+    });
+    if (!existing) return null;
+    if (existing.email === data.email) return 'email' as const;
+    if (existing.phone === data.phone) return 'phone' as const;
+    return 'username' as const;
+  }
+
   async isAdmin(id: string) {
     const user = await this.prisma.user.findUnique({ where: { id }, select: { role: true } });
     return user?.role === 'admin';
