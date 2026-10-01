@@ -18,6 +18,11 @@ export class AdminCartController {
     return this.cart.approve(id);
   }
 
+  @Post(':id/deliver')
+  deliver(@Param('id') id: string) {
+    return this.cart.markDelivered(id);
+  }
+
   @Post(':id/reject')
   reject(@Param('id') id: string, @Body() body: { reviewNote?: string }) {
     return this.cart.reject(id, body.reviewNote);

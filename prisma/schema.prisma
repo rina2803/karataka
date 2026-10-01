@@ -113,7 +113,14 @@ model CartOrder {
   deliveryFee      Decimal
   itemsTotal       Decimal
   commissionAmount Decimal         @default("0")
-  status           String          @default("pending") // pending | approved | rejected
+  /// pending (attente validation admin) | approved (attente de livraison)
+  /// | delivered (achat terminé) | rejected
+  status           String          @default("pending")
+  /// mvola | cash (paiement à la livraison)
+  paymentMethod    String          @default("cash")
+  paymentPhone     String?
+  paymentReference String?
+  deliveredAt      DateTime?
   reviewNote       String?
   createdAt        DateTime        @default(now())
   reviewedAt       DateTime?

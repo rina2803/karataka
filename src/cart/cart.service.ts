@@ -22,6 +22,9 @@ interface CheckoutBody {
   supplierCount?: number;
   deliveryLat?: number;
   deliveryLng?: number;
+  paymentMethod?: string;
+  paymentPhone?: string;
+  paymentReference?: string;
 }
 
 /// Position GPS gardée seulement si elle est plausible.
@@ -46,6 +49,19 @@ export class CartService {
     const deliveryCity = body.deliveryCity?.trim();
     if (!deliveryName || !deliveryPhone || !deliveryAddress || !deliveryCity) {
       throw new BadRequestException('Merci de renseigner le nom, téléphone, adresse et ville de livraison');
+    }
+
+    // MVola : numéro qui a payé + référence de transaction obligatoires.
+    const paymentMethod = body.paymentMethod === 'mvola' ? 'mvola' : 'cash';
+    const paymentPhone = (body.paymentPhone ?? '').replace(/\s+/g, '');
+    const paymentReference = body.paymentReference?.trim() ?? '';
+    if (paymentMethod === 'mvola') {
+      if (!/^(\+261|0)3[2-9]\d{7}$/.test(paymentPhone)) {
+        throw new BadRequestException('Numéro MVola de paiement invalide');
+      }
+      if (paymentReference.length < 4) {
+        throw new BadRequestException('Référence de paiement MVola requise');
+      }
     }
 
     return this.prisma.$transaction(async (tx) => {
@@ -89,6 +105,9 @@ export class CartService {
           deliveryFee: String(deliveryFee),
           itemsTotal: String(itemsTotal),
           commissionAmount: String(commissionAmount),
+          paymentMethod,
+          paymentPhone: paymentMethod === 'mvola' ? paymentPhone : null,
+          paymentReference: paymentMethod === 'mvola' ? paymentReference : null,
           status: 'pending',
           items: { create: lineData },
         },
@@ -117,81 +136,68 @@ export class CartService {
     });
   }
 
+  /// Validation par un admin : stock réservé, commande « en attente de
+  /// livraison ». Le paiement (MVola ou à la livraison) se fait hors portefeuille.
   async approve(id: string) {
     const order = await this.prisma.cartOrder.findUnique({ where: { id }, include: { items: true } });
     if (!order) throw new NotFoundException('Commande introuvable');
     if (order.status !== 'pending') throw new BadRequestException('Cette commande a déjà été traitée');
 
     return this.prisma.$transaction(async (tx) => {
-      // Le stock a pu bouger entre la commande et la validation — on revérifie.
       for (const item of order.items) {
-        const product = await tx.product.findUnique({ where: { id: item.productId } });
-        if (!product || product.stock < item.quantity) {
-          throw new BadRequestException(`Stock devenu insuffisant pour un article de la commande (${item.productId})`);
-        }
-      }
-
-      // Payée par le portefeuille si le solde suffit, sinon paiement à la
-      // livraison (le responsable a appelé le client avant de valider).
-      const total = Number(order.itemsTotal) + Number(order.deliveryFee);
-      const wallet = await tx.wallet.findUnique({ where: { userId: order.userId } });
-      const charged = wallet
-        ? await tx.wallet.updateMany({
-            where: { id: wallet.id, balance: { gte: total } },
-            data: { balance: { decrement: total } },
-          })
-        : { count: 0 };
-      const paidByWallet = charged.count === 1;
-      if (wallet && paidByWallet) {
-        await tx.transaction.create({
-          data: { walletId: wallet.id, amount: `-${total}`, type: 'cart_purchase', meta: JSON.stringify({ orderId: id }) },
+        const reserved = await tx.product.updateMany({
+          where: { id: item.productId, stock: { gte: item.quantity } },
+          data: { stock: { decrement: item.quantity } },
         });
-      }
-
-      for (const item of order.items) {
-        await tx.product.update({ where: { id: item.productId }, data: { stock: { decrement: item.quantity } } });
-
-        // Vendeurs crédités seulement pour un paiement par portefeuille ; à
-        // la livraison, l'encaissement se fait hors application.
-        if (item.sellerId && paidByWallet) {
-          const lineTotal = Number(item.unitPrice) * item.quantity;
-          const commission = Math.round(lineTotal * MARKETPLACE_COMMISSION_RATE);
-          const payout = lineTotal - commission;
-
-          const sellerWallet = await tx.wallet.findUnique({ where: { userId: item.sellerId } });
-          if (sellerWallet) {
-            await tx.wallet.update({ where: { id: sellerWallet.id }, data: { balance: { increment: payout } } });
-            await tx.transaction.create({
-              data: {
-                walletId: sellerWallet.id,
-                amount: String(payout),
-                type: 'marketplace_sale',
-                meta: JSON.stringify({ orderId: id, productId: item.productId, commission }),
-              },
-            });
-          }
-
-          let platformWallet = await tx.wallet.findFirst({ where: { userId: null } });
-          if (!platformWallet) {
-            platformWallet = await tx.wallet.create({ data: { balance: String(commission) } });
-          } else {
-            await tx.wallet.update({ where: { id: platformWallet.id }, data: { balance: { increment: commission } } });
-          }
-          await tx.transaction.create({
-            data: { walletId: platformWallet.id, amount: String(commission), type: 'fee', meta: JSON.stringify({ source: 'cart', orderId: id }) },
-          });
+        if (reserved.count !== 1) {
+          throw new BadRequestException('Stock devenu insuffisant pour un article de la commande');
         }
       }
-
       await tx.cartOrder.update({
         where: { id },
-        data: {
-          status: 'approved',
-          reviewedAt: new Date(),
-          reviewNote: paidByWallet ? 'Payée par le portefeuille' : 'Paiement à la livraison',
-        },
+        data: { status: 'approved', reviewedAt: new Date(), reviewNote: null },
       });
-      return { ok: true, paidByWallet };
+      return { ok: true };
+    });
+  }
+
+  /// Livraison effectuée : achat terminé, les vendeurs sont crédités (moins
+  /// la commission plateforme).
+  async markDelivered(id: string) {
+    const order = await this.prisma.cartOrder.findUnique({ where: { id }, include: { items: true } });
+    if (!order) throw new NotFoundException('Commande introuvable');
+    if (order.status !== 'approved') throw new BadRequestException('La commande doit être validée avant la livraison');
+
+    return this.prisma.$transaction(async (tx) => {
+      for (const item of order.items) {
+        if (!item.sellerId) continue;
+        const lineTotal = Number(item.unitPrice) * item.quantity;
+        const commission = Math.round(lineTotal * MARKETPLACE_COMMISSION_RATE);
+        const payout = lineTotal - commission;
+        const sellerWallet = await tx.wallet.findUnique({ where: { userId: item.sellerId } });
+        if (sellerWallet) {
+          await tx.wallet.update({ where: { id: sellerWallet.id }, data: { balance: { increment: payout } } });
+          await tx.transaction.create({
+            data: {
+              walletId: sellerWallet.id,
+              amount: String(payout),
+              type: 'marketplace_sale',
+              meta: JSON.stringify({ orderId: id, productId: item.productId, commission }),
+            },
+          });
+        }
+        let platformWallet = await tx.wallet.findFirst({ where: { userId: null } });
+        if (!platformWallet) {
+          platformWallet = await tx.wallet.create({ data: { balance: String(commission) } });
+        } else {
+          await tx.wallet.update({ where: { id: platformWallet.id }, data: { balance: { increment: commission } } });
+        }
+        await tx.transaction.create({
+          data: { walletId: platformWallet.id, amount: String(commission), type: 'fee', meta: JSON.stringify({ source: 'cart', orderId: id }) },
+        });
+      }
+      await tx.cartOrder.update({ where: { id }, data: { status: 'delivered', deliveredAt: new Date() } });
+      return { ok: true };
     });
   }
 
