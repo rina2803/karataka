@@ -1,3 +1,5 @@
+import { formatAr } from '../common/format';
+import { NotificationsService } from '../notifications/notifications.service';
 import { Body, Controller, Get, Post, Req, UnauthorizedException, UseGuards } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
@@ -13,7 +15,7 @@ const MIN_AMOUNT = 2000; // Ar
 @Controller('payments/manual')
 @UseGuards(JwtAuthGuard)
 export class ManualPaymentsController {
-  constructor(private prisma: PrismaService) {}
+  constructor(private prisma: PrismaService, private notifications: NotificationsService) {}
 
   @Post('deposit')
   async requestDeposit(@Body() body: { amount: number; reference?: string }, @Req() req: any) {
@@ -31,6 +33,12 @@ export class ManualPaymentsController {
         reference: body.reference?.trim() || null,
         status: 'pending',
       },
+    });
+    await this.notifications.notifyAdmins({
+      type: 'payment',
+      title: 'Dépôt MVola à vérifier',
+      body: `${formatAr(amount)}${request.reference ? ` — réf. ${request.reference}` : ''}`,
+      data: { requestId: request.id, screen: 'admin-payments' },
     });
     return { ok: true, requestId: request.id };
   }
@@ -60,6 +68,12 @@ export class ManualPaymentsController {
         phone: body.phone?.trim() || null,
         status: 'pending',
       },
+    });
+    await this.notifications.notifyAdmins({
+      type: 'payment',
+      title: 'Retrait MVola demandé',
+      body: `${formatAr(amount)} vers ${request.phone ?? 'numéro non précisé'}`,
+      data: { requestId: request.id, screen: 'admin-payments' },
     });
     return { ok: true, requestId: request.id };
   }

@@ -19,6 +19,7 @@ import { HomeModule } from './home/home.module';
 import { AppReleaseModule } from './app-release/app-release.module';
 import { PointsModule } from './points/points.module';
 import { ShareModule } from './share/share.module';
+import { NotificationsModule } from './notifications/notifications.module';
 
 @Module({
   imports: [
@@ -39,6 +40,7 @@ import { ShareModule } from './share/share.module';
     AppReleaseModule,
     PointsModule,
     ShareModule,
+    NotificationsModule,
   ],
   controllers: [HealthController, TestController],
   providers: [PrismaService],

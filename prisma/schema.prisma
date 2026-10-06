@@ -38,6 +38,40 @@ model User {
   following          SellerFollow[]          @relation("follower")
   followers          SellerFollow[]          @relation("followedSeller")
   productShares      ProductShare[]
+  /// Magasin partenaire / vendeur mis en avant par l'admin (accueil, boutique).
+  isPartner          Boolean                 @default(false)
+  notifications      Notification[]
+  devices            DeviceToken[]
+}
+
+/// Notification affichée dans l'app (cloche) et envoyée sur le téléphone
+/// (Firebase) si l'appareil est enregistré.
+model Notification {
+  id        String   @id @default(cuid())
+  user      User     @relation(fields: [userId], references: [id])
+  userId    String
+  /// order | seller | payment | tournament | game | follow | admin | system
+  type      String   @default("system")
+  title     String
+  body      String
+  /// JSON facultatif pour ouvrir le bon écran (ex. {"orderId":"..."}).
+  data      String?
+  read      Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  @@index([userId, read, createdAt])
+}
+
+/// Jeton Firebase Cloud Messaging d'un téléphone (notifications push).
+model DeviceToken {
+  id        String   @id @default(cuid())
+  user      User     @relation(fields: [userId], references: [id])
+  userId    String
+  token     String   @unique
+  platform  String   @default("android")
+  updatedAt DateTime @updatedAt
+
+  @@index([userId])
 }
 
 /// Ligne d'historique Karataka Points. `refKey` (unique) rend chaque
@@ -333,6 +367,15 @@ model Tournament {
   /// Le bracket (rounds + horaires) n'est généré qu'une fois, sur demande —
   /// évite de re-tirer au sort les paires à chaque consultation.
   bracketGenerated Boolean                 @default(false)
+  /// Créateur : lui seul peut lancer le tournoi (bracket) une fois complet.
+  /// `null` pour les tournois historiques → réservés à l'admin.
+  createdById      String?
+  /// Nombre de places ; le lancement n'est possible que tournoi complet.
+  maxParticipants  Int                     @default(8)
+  /// chess | checkers | fanorona
+  game             String                  @default("chess")
+  /// open (inscriptions) | started (bracket lancé) | finished
+  status           String                  @default("open")
   participants     TournamentParticipant[]
   matches          TournamentMatch[]
 }

@@ -2,14 +2,24 @@ import { Injectable, BadRequestException, ForbiddenException } from '@nestjs/com
 import { PrismaService } from '../prisma/prisma.service';
 import { WalletService } from '../wallet/wallet.service';
 import { PointsService } from '../points/points.service';
+import { NotificationsService } from '../notifications/notifications.service';
 
 /// Écart entre le début de chaque ronde du bracket — donne un vrai « emploi
 /// du temps » du tournoi sans dépendre de la durée réelle des parties.
 const ROUND_GAP_MINUTES = 25;
 
+/// Tailles de tournoi possibles (bracket à élimination directe).
+const TOURNAMENT_SIZES = [2, 4, 8, 16, 32];
+const TOURNAMENT_GAMES = ['chess', 'checkers', 'fanorona'];
+
 @Injectable()
 export class GamesService {
-  constructor(private prisma: PrismaService, private wallet: WalletService, private points: PointsService) {}
+  constructor(
+    private prisma: PrismaService,
+    private wallet: WalletService,
+    private points: PointsService,
+    private notifications: NotificationsService,
+  ) {}
 
   private async ensureDefaultTournaments() {
     const count = await this.prisma.tournament.count();
@@ -48,20 +58,41 @@ export class GamesService {
     });
   }
 
-  async createTournament(body: { name: string; entryFee: number; startsAt: string }) {
+  async createTournament(
+    creatorId: string,
+    body: { name: string; entryFee: number; startsAt: string; maxParticipants?: number; game?: string },
+  ) {
     const startsAt = new Date(body.startsAt);
-    if (!body.name?.trim() || Number(body.entryFee) < 0 || !body.startsAt || Number.isNaN(startsAt.getTime())) {
-      throw new BadRequestException('Invalid tournament data');
+    const name = body.name?.trim() ?? '';
+    if (!name || name.length > 60 || Number(body.entryFee) < 0 || !body.startsAt || Number.isNaN(startsAt.getTime())) {
+      throw new BadRequestException('Nom, frais et date du tournoi requis');
     }
-    return this.prisma.tournament.create({
-      data: { name: body.name.trim(), entryFee: String(body.entryFee), startsAt },
+    const maxParticipants = Number(body.maxParticipants ?? 8);
+    if (!TOURNAMENT_SIZES.includes(maxParticipants)) {
+      throw new BadRequestException(`Nombre de joueurs possible : ${TOURNAMENT_SIZES.join(', ')}`);
+    }
+    const game = TOURNAMENT_GAMES.includes(body.game ?? '') ? body.game! : 'chess';
+    const tournament = await this.prisma.tournament.create({
+      data: { name, entryFee: String(Number(body.entryFee) || 0), startsAt, maxParticipants, game, createdById: creatorId },
     });
+    await this.notifications.notifyAdmins({
+      type: 'tournament',
+      title: 'Nouveau tournoi créé',
+      body: `« ${name} » — ${maxParticipants} joueurs`,
+      data: { tournamentId: tournament.id, screen: 'tournament' },
+    });
+    return tournament;
   }
 
   async joinTournament(tournamentId: string, userId: string) {
     const tournament = await this.prisma.tournament.findUnique({ where: { id: tournamentId } });
     if (!tournament) throw new BadRequestException('Tournament not found');
+    if (tournament.status !== 'open' || tournament.bracketGenerated) {
+      throw new BadRequestException('Les inscriptions de ce tournoi sont fermées');
+    }
     if (tournament.startsAt <= new Date()) throw new BadRequestException('Tournament already started');
+    const count = await this.prisma.tournamentParticipant.count({ where: { tournamentId } });
+    if (count >= tournament.maxParticipants) throw new BadRequestException('Ce tournoi est complet');
 
     try {
       const result = await this.prisma.$transaction(async (tx) => {
@@ -93,6 +124,18 @@ export class GamesService {
       // pourrait être créé/rejoint en boucle pour farmer des points.
       if (!result.alreadyJoined && Number(tournament.entryFee) > 0) {
         await this.points.award(userId, 'tournament_join', tournamentId);
+      }
+      if (!result.alreadyJoined && tournament.createdById && tournament.createdById !== userId) {
+        const joined = await this.prisma.tournamentParticipant.count({ where: { tournamentId } });
+        const full = joined >= tournament.maxParticipants;
+        await this.notifications.notifyUser(tournament.createdById, {
+          type: 'tournament',
+          title: full ? 'Tournoi complet 🏆' : 'Nouveau participant',
+          body: full
+            ? `« ${tournament.name} » est complet : vous pouvez lancer le tournoi.`
+            : `« ${tournament.name} » : ${joined}/${tournament.maxParticipants} inscrits.`,
+          data: { tournamentId, screen: 'tournament' },
+        });
       }
       return result;
     } catch (error: any) {
@@ -157,10 +200,18 @@ export class GamesService {
 
   /// Génère le bracket (rondes + horaires) une seule fois — idempotent : un
   /// second appel renvoie simplement le bracket déjà en base.
-  async generateBracket(tournamentId: string) {
+  /// Lancement du tournoi : seul le créateur (ou l'admin pour les tournois
+  /// sans créateur) peut le faire, et seulement une fois le tournoi complet.
+  async generateBracket(tournamentId: string, requesterId: string, requesterIsAdmin: boolean) {
     const tournament = await this.prisma.tournament.findUnique({ where: { id: tournamentId } });
     if (!tournament) throw new BadRequestException('Tournament not found');
     if (tournament.bracketGenerated) return this.getBracket(tournamentId);
+    const allowed = tournament.createdById ? tournament.createdById === requesterId : requesterIsAdmin;
+    if (!allowed) throw new ForbiddenException('Seul le créateur du tournoi peut le lancer');
+    const joined = await this.prisma.tournamentParticipant.count({ where: { tournamentId } });
+    if (joined < tournament.maxParticipants) {
+      throw new BadRequestException(`Tournoi pas encore complet (${joined}/${tournament.maxParticipants})`);
+    }
 
     const participants = await this.prisma.tournamentParticipant.findMany({
       where: { tournamentId },
@@ -239,6 +290,17 @@ export class GamesService {
       this.prisma.tournament.update({ where: { id: tournamentId }, data: { bracketGenerated: true } }),
     ]);
 
+    await this.prisma.tournament.update({ where: { id: tournamentId }, data: { status: 'started' } });
+    const players = await this.prisma.tournamentParticipant.findMany({ where: { tournamentId }, select: { userId: true } });
+    await this.notifications.notifyUsers(
+      players.map((p) => p.userId),
+      {
+        type: 'tournament',
+        title: 'Le tournoi commence ! 🏁',
+        body: `« ${tournament.name} » est lancé : consultez votre premier match.`,
+        data: { tournamentId, screen: 'tournament' },
+      },
+    );
     return this.getBracket(tournamentId);
   }
 

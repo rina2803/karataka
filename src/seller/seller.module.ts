@@ -7,12 +7,12 @@ import { AuthModule } from '../auth/auth.module';
 import { UsersModule } from '../users/users.module';
 import { AdminGuard } from '../auth/admin.guard';
 import { OptionalJwtGuard } from '../auth/optional-jwt.guard';
-import { SellersController } from './sellers.controller';
+import { AdminPartnersController, SellersController } from './sellers.controller';
 import { SellersService } from './sellers.service';
 
 @Module({
   imports: [AuthModule, UsersModule],
-  controllers: [SellerController, AdminSellerController, SellersController],
+  controllers: [SellerController, AdminSellerController, SellersController, AdminPartnersController],
   providers: [SellerService, SellersService, PrismaService, AdminGuard, OptionalJwtGuard],
 })
 export class SellerModule {}

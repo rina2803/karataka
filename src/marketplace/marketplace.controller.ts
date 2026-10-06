@@ -88,6 +88,20 @@ export class MarketplaceController {
     return this.marketplace.archiveProduct(id, req.user.sub, isAdmin);
   }
 
+  @UseGuards(JwtAuthGuard)
+  @Post('products/:id/promo')
+  async promo(@Param('id') id: string, @Body() body: { promoPrice?: number }, @Req() req: any) {
+    const isAdmin = await this.users.isAdmin(req.user.sub);
+    return this.marketplace.setPromo(id, req.user.sub, isAdmin, Number(body?.promoPrice));
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Delete('products/:id/promo')
+  async endPromo(@Param('id') id: string, @Req() req: any) {
+    const isAdmin = await this.users.isAdmin(req.user.sub);
+    return this.marketplace.endPromo(id, req.user.sub, isAdmin);
+  }
+
   @UseGuards(OptionalJwtGuard)
   @Post('products/:id/share')
   share(@Param('id') id: string, @Body() body: { channel?: string }, @Req() req: any) {

@@ -6,6 +6,7 @@ import {
   WebSocketServer,
   ConnectedSocket,
   OnGatewayConnection,
+  OnGatewayInit,
   OnGatewayDisconnect,
 } from '@nestjs/websockets';
 import { Server, Socket } from 'socket.io';
@@ -14,6 +15,7 @@ import { UsersService } from '../users/users.service';
 import { AuthService } from '../auth/auth.service';
 import { WalletService } from '../wallet/wallet.service';
 import { PointsService } from '../points/points.service';
+import { NotificationsService } from '../notifications/notifications.service';
 import { Chess } from 'chess.js';
 
 const MIN_STAKE = 2000; // Ar — mise minimale imposée.
@@ -53,7 +55,7 @@ interface ChessRoom {
 }
 
 @WebSocketGateway({ cors: true })
-export class RealtimeGateway implements OnGatewayConnection, OnGatewayDisconnect {
+export class RealtimeGateway implements OnGatewayInit, OnGatewayConnection, OnGatewayDisconnect {
   @WebSocketServer()
   server: Server;
 
@@ -70,7 +72,12 @@ export class RealtimeGateway implements OnGatewayConnection, OnGatewayDisconnect
     private auth: AuthService,
     private wallet: WalletService,
     private points: PointsService,
+    private notifications: NotificationsService,
   ) {}
+
+  afterInit(server: Server) {
+    this.notifications.attachServer(server);
+  }
 
   handleConnection(socket: Socket) {
     const token = this.extractToken(socket);

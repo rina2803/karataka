@@ -1,9 +1,10 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import { NotificationsService } from '../notifications/notifications.service';
 import { PrismaService } from '../prisma/prisma.service';
 
 @Injectable()
 export class SellerService {
-  constructor(private prisma: PrismaService) {}
+  constructor(private prisma: PrismaService, private notifications: NotificationsService) {}
 
   async apply(
     userId: string,
@@ -30,6 +31,13 @@ export class SellerService {
         selfieUrl: body.selfieBase64,
         mvolaNumber,
       },
+    });
+    const user = await this.prisma.user.findUnique({ where: { id: userId }, select: { displayName: true, username: true } });
+    await this.notifications.notifyAdmins({
+      type: 'seller',
+      title: 'Nouvelle demande vendeur',
+      body: `${user?.displayName || user?.username || 'Un utilisateur'} veut vendre sur Karataka (CIN à vérifier).`,
+      data: { applicationId: application.id, screen: 'admin-sellers' },
     });
     return { ok: true, alreadySubmitted: false, application };
   }
@@ -64,11 +72,17 @@ export class SellerService {
     if (!application) throw new NotFoundException('Candidature introuvable');
     if (application.status !== 'pending') throw new BadRequestException('Cette candidature a déjà été traitée');
 
-    return this.prisma.$transaction(async (tx) => {
+    await this.prisma.$transaction(async (tx) => {
       await tx.sellerApplication.update({ where: { id }, data: { status: 'approved', reviewedAt: new Date() } });
       await tx.user.update({ where: { id: application.userId }, data: { isApprovedSeller: true } });
-      return { ok: true };
     });
+    await this.notifications.notifyUser(application.userId, {
+      type: 'seller',
+      title: 'Vous êtes vendeur Karataka 🎉',
+      body: 'Votre dossier est validé : publiez vos premiers produits dès maintenant.',
+      data: { screen: 'seller-space' },
+    });
+    return { ok: true };
   }
 
   async reject(id: string, reviewNote?: string) {
@@ -79,6 +93,12 @@ export class SellerService {
     await this.prisma.sellerApplication.update({
       where: { id },
       data: { status: 'rejected', reviewedAt: new Date(), reviewNote: reviewNote ?? null },
+    });
+    await this.notifications.notifyUser(application.userId, {
+      type: 'seller',
+      title: 'Demande vendeur refusée',
+      body: reviewNote ? `Motif : ${reviewNote}. Vous pouvez renvoyer un dossier.` : 'Vous pouvez renvoyer un dossier complet.',
+      data: { screen: 'seller-space' },
     });
     return { ok: true };
   }

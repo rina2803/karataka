@@ -1,4 +1,5 @@
-import { Controller, Delete, Get, Param, Post, Query, Req, UseGuards } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, Patch, Post, Query, Req, UseGuards } from '@nestjs/common';
+import { AdminGuard } from '../auth/admin.guard';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { OptionalJwtGuard } from '../auth/optional-jwt.guard';
 import { clampInt } from '../common/pagination';
@@ -11,8 +12,12 @@ export class SellersController {
   constructor(private sellers: SellersService) {}
 
   @Get()
-  list(@Query('sort') sort?: string, @Query('limit') limit?: string) {
-    return this.sellers.list(sort === 'popular' ? 'popular' : 'name', clampInt(limit, 50, 1, 100));
+  list(@Query('sort') sort?: string, @Query('limit') limit?: string, @Query('partner') partner?: string) {
+    return this.sellers.list(
+      sort === 'popular' ? 'popular' : 'name',
+      clampInt(limit, 50, 1, 100),
+      partner === 'true' || partner === '1',
+    );
   }
 
   @UseGuards(JwtAuthGuard)
@@ -37,5 +42,22 @@ export class SellersController {
   @Delete(':id/follow')
   unfollow(@Param('id') id: string, @Req() req: any) {
     return this.sellers.unfollow(req.user.sub, id);
+  }
+}
+
+/// Admin : magasins partenaires / vendeurs mis en avant.
+@Controller('admin/partners')
+@UseGuards(JwtAuthGuard, AdminGuard)
+export class AdminPartnersController {
+  constructor(private sellers: SellersService) {}
+
+  @Get()
+  list() {
+    return this.sellers.adminList();
+  }
+
+  @Patch(':id')
+  set(@Param('id') id: string, @Body() body: { isPartner?: boolean }) {
+    return this.sellers.setPartner(id, body?.isPartner === true);
   }
 }

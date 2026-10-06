@@ -2,6 +2,8 @@ import { BadRequestException, ForbiddenException, Injectable, NotFoundException 
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { PointsService } from '../points/points.service';
+import { NotificationsService } from '../notifications/notifications.service';
+import { formatAr } from '../common/format';
 import { clampInt } from '../common/pagination';
 import { fallbackProductImage } from '../seed-catalog';
 
@@ -15,6 +17,8 @@ const DEFAULT_PRODUCTS = [
   { id: 'tsenabe-cap', name: 'Casquette L&K', description: 'Casquette officielle bleu électrique.', price: 18000, stock: 15, category: 'Accessoires', sellerName: 'Tsenabe officiel', imageUrl: 'https://images.unsplash.com/photo-1521369909029-2afed882baee?w=640&q=85', active: true },
   { id: 'tsenabe-mug', name: 'Mug Tsenabe', description: 'Mug collector pour les joueurs.', price: 12000, stock: 30, category: 'Maison', sellerName: 'Tsenabe officiel', imageUrl: 'https://images.unsplash.com/photo-1544787219-7f47ccb76574?w=640&q=85', active: true },
 ];
+
+const CATEGORY_PRIORITY = ['Repas', 'Vêtements', 'Beauté'];
 
 const SELLER_SELECT = { id: true, username: true, displayName: true, avatarColor: true, avatarImage: true } as const;
 
@@ -39,7 +43,11 @@ function withImage<T extends { imageUrl: string | null; category: string | null 
 
 @Injectable()
 export class MarketplaceService {
-  constructor(private prisma: PrismaService, private points: PointsService) {}
+  constructor(
+    private prisma: PrismaService,
+    private points: PointsService,
+    private notifications: NotificationsService,
+  ) {}
 
   async listProducts(category?: string) {
     const products = await this.prisma.product.findMany({
@@ -226,6 +234,45 @@ export class MarketplaceService {
     });
   }
 
+  /// Le vendeur baisse son prix après création : l'ancien prix devient le
+  /// prix barré et le produit apparaît dans « Promotions ». Ses abonnés
+  /// sont prévenus à la première mise en promo.
+  async setPromo(productId: string, userId: string, isAdmin: boolean, promoPrice: number) {
+    const product = await this.assertOwnerOrAdmin(productId, userId, isAdmin);
+    const regular = Number(product.isPromo && product.originalPrice ? product.originalPrice : product.price);
+    const price = Math.round(Number(promoPrice));
+    if (!Number.isFinite(price) || price <= 0) throw new BadRequestException('Prix promo invalide');
+    if (price >= regular) throw new BadRequestException(`Le prix promo doit être inférieur à ${formatAr(regular)}`);
+    const wasPromo = product.isPromo;
+    const updated = await this.prisma.product.update({
+      where: { id: productId },
+      data: { price: String(price), originalPrice: String(regular), isPromo: true },
+    });
+    if (!wasPromo && product.sellerId) {
+      const followers = await this.prisma.sellerFollow.findMany({ where: { sellerId: product.sellerId }, select: { followerId: true } });
+      const percent = Math.round(100 - (price * 100) / regular);
+      await this.notifications.notifyUsers(
+        followers.map((f) => f.followerId),
+        {
+          type: 'follow',
+          title: `Promo -${percent} % chez ${product.sellerName ?? 'un vendeur suivi'}`,
+          body: `${product.name} : ${formatAr(price)} au lieu de ${formatAr(regular)}`,
+          data: { productId, screen: 'product' },
+        },
+      );
+    }
+    return updated;
+  }
+
+  async endPromo(productId: string, userId: string, isAdmin: boolean) {
+    const product = await this.assertOwnerOrAdmin(productId, userId, isAdmin);
+    if (!product.isPromo) return product;
+    return this.prisma.product.update({
+      where: { id: productId },
+      data: { price: product.originalPrice ?? product.price, originalPrice: null, isPromo: false },
+    });
+  }
+
   async archiveProduct(productId: string, userId: string, isAdmin: boolean) {
     await this.assertOwnerOrAdmin(productId, userId, isAdmin);
     await this.prisma.product.update({ where: { id: productId }, data: { active: false } });
@@ -239,8 +286,14 @@ export class MarketplaceService {
       distinct: ['category'],
       orderBy: { category: 'asc' },
     });
-    const categories = rows.map((r) => r.category).filter((c): c is string => !!c);
-    return categories.length > 0 ? categories : DEFAULT_PRODUCTS.map((product) => product.category);
+    const categories = rows.map((r) => r.category).filter((c): c is string => !!c && c !== 'general');
+    const list = categories.length > 0 ? categories : DEFAULT_PRODUCTS.map((product) => product.category);
+    // Ordre voulu : Repas, Vêtements, Beauté, puis les autres (alphabétique).
+    const rank = (c: string) => {
+      const i = CATEGORY_PRIORITY.indexOf(c);
+      return i === -1 ? CATEGORY_PRIORITY.length : i;
+    };
+    return [...list].sort((a, b) => rank(a) - rank(b) || a.localeCompare(b, 'fr'));
   }
 
   listOrders(userId: string) {

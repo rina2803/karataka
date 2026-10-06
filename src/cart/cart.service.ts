@@ -1,4 +1,6 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import { formatAr } from '../common/format';
+import { NotificationsService } from '../notifications/notifications.service';
 import { PointsService } from '../points/points.service';
 import { PrismaService } from '../prisma/prisma.service';
 
@@ -8,6 +10,8 @@ const MARKETPLACE_COMMISSION_RATE = 0.05;
 /// Frais de livraison : 6 000 Ar par fournisseur distinct dans le panier.
 /// Le serveur recalcule toujours ce montant à partir des produits reçus.
 const DELIVERY_FEE_PER_SUPPLIER = 6000;
+
+const PAYMENT_LABEL: Record<string, string> = { mvola: 'MVola', wallet: 'portefeuille', cash: 'à la livraison' };
 
 interface CheckoutItem {
   productId: string;
@@ -38,7 +42,11 @@ function validPosition(lat?: number, lng?: number) {
 
 @Injectable()
 export class CartService {
-  constructor(private prisma: PrismaService, private points: PointsService) {}
+  constructor(
+    private prisma: PrismaService,
+    private points: PointsService,
+    private notifications: NotificationsService,
+  ) {}
 
   async checkout(userId: string, body: CheckoutBody) {
     if (!Array.isArray(body.items) || body.items.length === 0) {
@@ -52,8 +60,11 @@ export class CartService {
       throw new BadRequestException('Merci de renseigner le nom, téléphone, adresse et ville de livraison');
     }
 
-    // MVola : numéro qui a payé + référence de transaction obligatoires.
-    const paymentMethod = body.paymentMethod === 'mvola' ? 'mvola' : 'cash';
+    // Trois modes : MVola (numéro + référence obligatoires), portefeuille
+    // (débité tout de suite, remboursé si refus) ou paiement à la livraison.
+    // Le solde du portefeuille n'est touché QUE pour le mode « wallet ».
+    const paymentMethod =
+      body.paymentMethod === 'mvola' ? 'mvola' : body.paymentMethod === 'wallet' ? 'wallet' : 'cash';
     const paymentPhone = (body.paymentPhone ?? '').replace(/\s+/g, '');
     const paymentReference = body.paymentReference?.trim() ?? '';
     if (paymentMethod === 'mvola') {
@@ -65,7 +76,7 @@ export class CartService {
       }
     }
 
-    return this.prisma.$transaction(async (tx) => {
+    const order = await this.prisma.$transaction(async (tx) => {
       let itemsTotal = 0;
       let peerTotal = 0;
       const supplierKeys = new Set<string>();
@@ -95,6 +106,22 @@ export class CartService {
       const deliveryFee = supplierKeys.size * DELIVERY_FEE_PER_SUPPLIER;
       const commissionAmount = Math.round(peerTotal * MARKETPLACE_COMMISSION_RATE);
 
+      if (paymentMethod === 'wallet') {
+        const total = itemsTotal + deliveryFee;
+        const wallet = await tx.wallet.findUnique({ where: { userId } });
+        if (!wallet) throw new BadRequestException('Portefeuille introuvable');
+        const charged = await tx.wallet.updateMany({
+          where: { id: wallet.id, balance: { gte: total } },
+          data: { balance: { decrement: total } },
+        });
+        if (charged.count !== 1) {
+          throw new BadRequestException(`Solde insuffisant : ${formatAr(total)} nécessaires`);
+        }
+        await tx.transaction.create({
+          data: { walletId: wallet.id, amount: `-${total}`, type: 'cart_payment', meta: JSON.stringify({ items: lineData.length }) },
+        });
+      }
+
       return tx.cartOrder.create({
         data: {
           userId,
@@ -115,6 +142,15 @@ export class CartService {
         include: { items: { include: { product: { select: { name: true, imageUrl: true } } } } },
       });
     });
+
+    const total = Number(order.itemsTotal) + Number(order.deliveryFee);
+    await this.notifications.notifyAdmins({
+      type: 'order',
+      title: 'Nouvelle commande à valider',
+      body: `${order.deliveryName} — ${formatAr(total)} (${PAYMENT_LABEL[order.paymentMethod] ?? order.paymentMethod}), ${order.deliveryCity}`,
+      data: { orderId: order.id, screen: 'admin-orders' },
+    });
+    return order;
   }
 
   myOrders(userId: string) {
@@ -144,7 +180,7 @@ export class CartService {
     if (!order) throw new NotFoundException('Commande introuvable');
     if (order.status !== 'pending') throw new BadRequestException('Cette commande a déjà été traitée');
 
-    return this.prisma.$transaction(async (tx) => {
+    await this.prisma.$transaction(async (tx) => {
       for (const item of order.items) {
         const reserved = await tx.product.updateMany({
           where: { id: item.productId, stock: { gte: item.quantity } },
@@ -158,8 +194,21 @@ export class CartService {
         where: { id },
         data: { status: 'approved', reviewedAt: new Date(), reviewNote: null },
       });
-      return { ok: true };
     });
+    await this.notifications.notifyUser(order.userId, {
+      type: 'order',
+      title: 'Commande validée ✅',
+      body: 'Votre commande est validée et part en livraison.',
+      data: { orderId: id, screen: 'orders' },
+    });
+    const sellerIds = order.items.map((i) => i.sellerId).filter((v): v is string => !!v);
+    await this.notifications.notifyUsers(sellerIds, {
+      type: 'order',
+      title: 'Nouvelle vente à préparer',
+      body: 'Une commande contenant vos produits vient d\'être validée.',
+      data: { orderId: id },
+    });
+    return { ok: true };
   }
 
   /// Livraison effectuée : achat terminé, les vendeurs sont crédités (moins
@@ -201,7 +250,20 @@ export class CartService {
       return { ok: true };
     });
     // Points d'achat seulement une fois la livraison confirmée par l'admin.
-    await this.points.award(order.userId, 'purchase', `cart:${id}`);
+    const earned = await this.points.award(order.userId, 'purchase', `cart:${id}`);
+    await this.notifications.notifyUser(order.userId, {
+      type: 'order',
+      title: 'Commande livrée 📦',
+      body: earned > 0 ? `Merci pour votre achat ! +${earned} Karataka Points.` : 'Merci pour votre achat !',
+      data: { orderId: id, screen: 'orders' },
+    });
+    const sellerIds = order.items.map((i) => i.sellerId).filter((v): v is string => !!v);
+    await this.notifications.notifyUsers(sellerIds, {
+      type: 'order',
+      title: 'Vente finalisée 💰',
+      body: 'La livraison est confirmée : le montant (moins 5 % de commission) est crédité sur votre portefeuille.',
+      data: { orderId: id, screen: 'wallet' },
+    });
     return result;
   }
 
@@ -210,9 +272,30 @@ export class CartService {
     if (!order) throw new NotFoundException('Commande introuvable');
     if (order.status !== 'pending') throw new BadRequestException('Cette commande a déjà été traitée');
 
-    await this.prisma.cartOrder.update({
-      where: { id },
-      data: { status: 'rejected', reviewedAt: new Date(), reviewNote: reviewNote ?? null },
+    const refund = Number(order.itemsTotal) + Number(order.deliveryFee);
+    await this.prisma.$transaction(async (tx) => {
+      await tx.cartOrder.update({
+        where: { id },
+        data: { status: 'rejected', reviewedAt: new Date(), reviewNote: reviewNote ?? null },
+      });
+      // Payée par portefeuille : remboursement intégral.
+      if (order.paymentMethod === 'wallet') {
+        const wallet = await tx.wallet.findUnique({ where: { userId: order.userId } });
+        if (wallet) {
+          await tx.wallet.update({ where: { id: wallet.id }, data: { balance: { increment: refund } } });
+          await tx.transaction.create({
+            data: { walletId: wallet.id, amount: String(refund), type: 'cart_refund', meta: JSON.stringify({ orderId: id }) },
+          });
+        }
+      }
+    });
+    await this.notifications.notifyUser(order.userId, {
+      type: 'order',
+      title: 'Commande refusée',
+      body:
+        (reviewNote ? `Motif : ${reviewNote}. ` : '') +
+        (order.paymentMethod === 'wallet' ? `${formatAr(refund)} remboursés sur votre portefeuille.` : 'Contactez-nous pour plus d\'informations.'),
+      data: { orderId: id, screen: 'orders' },
     });
     return { ok: true };
   }

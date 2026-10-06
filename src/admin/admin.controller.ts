@@ -1,3 +1,5 @@
+import { formatAr } from '../common/format';
+import { NotificationsService } from '../notifications/notifications.service';
 import { Body, Controller, Delete, Get, Param, Post, Put, Query, Req, UseGuards } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { WalletService } from '../wallet/wallet.service';
@@ -8,7 +10,7 @@ import { fallbackProductImage } from '../seed-catalog';
 @Controller('admin')
 @UseGuards(JwtAuthGuard, AdminGuard)
 export class AdminController {
-  constructor(private prisma: PrismaService, private wallet: WalletService) {}
+  constructor(private prisma: PrismaService, private wallet: WalletService, private notifications: NotificationsService) {}
 
   @Get('stats')
   async stats() {
@@ -60,6 +62,15 @@ export class AdminController {
       where: { id },
       data: { status: 'approved', reviewedAt: new Date(), reviewedBy: req.user?.sub },
     });
+    await this.notifications.notifyUser(request.userId, {
+      type: 'payment',
+      title: request.type === 'deposit' ? 'Dépôt crédité ✅' : 'Retrait envoyé ✅',
+      body:
+        request.type === 'deposit'
+          ? `${formatAr(request.amount)} ajoutés à votre portefeuille.`
+          : `${formatAr(request.amount)} envoyés sur votre MVola.`,
+      data: { screen: 'wallet' },
+    });
     return { ok: true };
   }
 
@@ -77,6 +88,12 @@ export class AdminController {
         reviewedBy: req.user?.sub,
         reference: body.reason ? `${request.reference ?? ''} [refusé: ${body.reason}]`.trim() : request.reference,
       },
+    });
+    await this.notifications.notifyUser(request.userId, {
+      type: 'payment',
+      title: request.type === 'deposit' ? 'Dépôt refusé' : 'Retrait refusé',
+      body: body.reason ? `Motif : ${body.reason}` : 'Contactez-nous pour plus d\'informations.',
+      data: { screen: 'wallet' },
     });
     return { ok: true };
   }
