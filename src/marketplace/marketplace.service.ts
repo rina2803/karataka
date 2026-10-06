@@ -1,5 +1,8 @@
 import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
+import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
+import { PointsService } from '../points/points.service';
+import { clampInt } from '../common/pagination';
 import { fallbackProductImage } from '../seed-catalog';
 
 /// Commission plateforme sur les ventes entre joueurs (produits avec un
@@ -13,9 +16,30 @@ const DEFAULT_PRODUCTS = [
   { id: 'tsenabe-mug', name: 'Mug Tsenabe', description: 'Mug collector pour les joueurs.', price: 12000, stock: 30, category: 'Maison', sellerName: 'Tsenabe officiel', imageUrl: 'https://images.unsplash.com/photo-1544787219-7f47ccb76574?w=640&q=85', active: true },
 ];
 
+const SELLER_SELECT = { id: true, username: true, displayName: true, avatarColor: true, avatarImage: true } as const;
+
+/// `mode: insensitive` n'existe qu'en PostgreSQL ; SQLite (local) compare
+/// déjà sans casse en ASCII via LIKE.
+const INSENSITIVE = /^postgres(ql)?:\/\//.test(process.env.DATABASE_URL || '') ? { mode: 'insensitive' as const } : {};
+
+export type ProductPageQuery = {
+  page?: string | number;
+  limit?: string | number;
+  q?: string;
+  category?: string;
+  sellerId?: string;
+  sellerName?: string;
+  promo?: boolean;
+  sort?: 'newest' | 'price_asc' | 'price_desc' | 'popular';
+};
+
+function withImage<T extends { imageUrl: string | null; category: string | null }>(product: T) {
+  return { ...product, imageUrl: product.imageUrl || fallbackProductImage(product.category) };
+}
+
 @Injectable()
 export class MarketplaceService {
-  constructor(private prisma: PrismaService) {}
+  constructor(private prisma: PrismaService, private points: PointsService) {}
 
   async listProducts(category?: string) {
     const products = await this.prisma.product.findMany({
@@ -24,12 +48,77 @@ export class MarketplaceService {
         ...(category ? { category } : {}),
       },
       orderBy: { createdAt: 'desc' },
-      include: { seller: { select: { id: true, username: true, displayName: true, avatarColor: true } } },
+      include: { seller: { select: SELLER_SELECT } },
     });
     if (products.length > 0) {
-      return products.map((product) => ({ ...product, imageUrl: product.imageUrl || fallbackProductImage(product.category) }));
+      return products.map(withImage);
     }
     return category ? DEFAULT_PRODUCTS.filter((product) => product.category === category) : DEFAULT_PRODUCTS;
+  }
+
+  /// Liste paginée (boutique, accueil, page vendeur) : filtres et tri faits
+  /// en base, pour ne jamais charger tout le catalogue sur le téléphone.
+  async listProductsPage(opts: ProductPageQuery) {
+    const page = clampInt(opts.page, 1, 1, 10_000);
+    const limit = clampInt(opts.limit, 20, 1, 50);
+    const q = opts.q?.trim();
+    const where: Prisma.ProductWhereInput = {
+      active: true,
+      ...(opts.category ? { category: opts.category } : {}),
+      ...(opts.sellerId ? { sellerId: opts.sellerId } : {}),
+      ...(opts.sellerName ? { sellerId: null, sellerName: opts.sellerName } : {}),
+      ...(opts.promo ? { isPromo: true } : {}),
+      ...(q
+        ? {
+            OR: [
+              { name: { contains: q, ...INSENSITIVE } },
+              { description: { contains: q, ...INSENSITIVE } },
+              { sellerName: { contains: q, ...INSENSITIVE } },
+              { category: { contains: q, ...INSENSITIVE } },
+            ],
+          }
+        : {}),
+    };
+    const orderBy: Prisma.ProductOrderByWithRelationInput[] =
+      opts.sort === 'price_asc'
+        ? [{ price: 'asc' }]
+        : opts.sort === 'price_desc'
+          ? [{ price: 'desc' }]
+          : opts.sort === 'popular'
+            ? [{ cartItems: { _count: 'desc' } }, { createdAt: 'desc' }]
+            : [{ createdAt: 'desc' }];
+    const [total, products] = await Promise.all([
+      this.prisma.product.count({ where }),
+      this.prisma.product.findMany({
+        where,
+        orderBy,
+        skip: (page - 1) * limit,
+        take: limit,
+        include: { seller: { select: SELLER_SELECT } },
+      }),
+    ]);
+    return { items: products.map(withImage), page, limit, total, hasMore: page * limit < total };
+  }
+
+  async getProduct(id: string) {
+    const product = await this.prisma.product.findFirst({
+      where: { id, active: true },
+      include: { seller: { select: SELLER_SELECT } },
+    });
+    if (!product) throw new NotFoundException('Produit introuvable');
+    return withImage(product);
+  }
+
+  /// Partage d'un produit : compté pour les statistiques ; si l'utilisateur
+  /// est connecté, points de partage (une fois par produit, plafonnés/jour).
+  /// Le partage lui-même n'est pas vérifiable : d'où le petit montant.
+  async recordShare(productId: string, userId: string | undefined, channel: string) {
+    const product = await this.prisma.product.findFirst({ where: { id: productId, active: true }, select: { id: true } });
+    if (!product) throw new NotFoundException('Produit introuvable');
+    const safeChannel = ['native', 'facebook', 'whatsapp', 'copy'].includes(channel) ? channel : 'native';
+    await this.prisma.productShare.create({ data: { productId, userId: userId ?? null, channel: safeChannel } });
+    const points = userId ? await this.points.award(userId, 'share_product', `${productId}:${userId}`) : 0;
+    return { ok: true, points };
   }
 
   productPhoto(productId: string) {
@@ -159,7 +248,7 @@ export class MarketplaceService {
   }
 
   async buy(productId: string, userId: string) {
-    return this.prisma.$transaction(async (tx) => {
+    const order = await this.prisma.$transaction(async (tx) => {
       const product = await tx.product.findFirst({ where: { id: productId, active: true } });
       if (!product || product.stock < 1) throw new BadRequestException('Produit indisponible');
       if (product.sellerId === userId) throw new BadRequestException('Vous ne pouvez pas acheter votre propre produit');
@@ -205,5 +294,7 @@ export class MarketplaceService {
 
       return tx.marketplaceOrder.create({ data: { productId, userId, amount: product.price, commissionAmount: String(commissionAmount) } });
     });
+    await this.points.award(userId, 'purchase', `market:${order.id}`);
+    return order;
   }
 }

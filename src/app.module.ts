@@ -17,6 +17,8 @@ import { SellerModule } from './seller/seller.module';
 import { CartModule } from './cart/cart.module';
 import { HomeModule } from './home/home.module';
 import { AppReleaseModule } from './app-release/app-release.module';
+import { PointsModule } from './points/points.module';
+import { ShareModule } from './share/share.module';
 
 @Module({
   imports: [
@@ -35,6 +37,8 @@ import { AppReleaseModule } from './app-release/app-release.module';
     CartModule,
     HomeModule,
     AppReleaseModule,
+    PointsModule,
+    ShareModule,
   ],
   controllers: [HealthController, TestController],
   providers: [PrismaService],

@@ -1,16 +1,33 @@
 import { Body, Controller, Delete, Get, NotFoundException, Param, Patch, Post, Query, Req, Res, UseGuards } from '@nestjs/common';
 import type { Response } from 'express';
-import { MarketplaceService } from './marketplace.service';
+import { MarketplaceService, ProductPageQuery } from './marketplace.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import { OptionalJwtGuard } from '../auth/optional-jwt.guard';
 import { UsersService } from '../users/users.service';
 
 @Controller('marketplace')
 export class MarketplaceController {
   constructor(private marketplace: MarketplaceService, private users: UsersService) {}
 
+  /// Sans `page`/`limit` : ancien format (tableau complet) pour les versions
+  /// déjà installées de l'app. Avec : `{ items, page, limit, total, hasMore }`.
   @Get('products')
-  products(@Query('category') category?: string) {
-    return this.marketplace.listProducts(category);
+  products(@Query() query: Record<string, string | undefined>) {
+    const paged = ['page', 'limit', 'q', 'sort', 'sellerId', 'sellerName', 'promo'].some((k) => query[k] !== undefined);
+    if (!paged) return this.marketplace.listProducts(query.category);
+    const sort = ['newest', 'price_asc', 'price_desc', 'popular'].includes(query.sort ?? '')
+      ? (query.sort as ProductPageQuery['sort'])
+      : 'newest';
+    return this.marketplace.listProductsPage({
+      page: query.page,
+      limit: query.limit,
+      q: query.q?.slice(0, 80),
+      category: query.category || undefined,
+      sellerId: query.sellerId || undefined,
+      sellerName: query.sellerName || undefined,
+      promo: query.promo === 'true' || query.promo === '1',
+      sort,
+    });
   }
 
   /// Photo envoyée par le vendeur depuis son téléphone.
@@ -69,5 +86,17 @@ export class MarketplaceController {
   async archive(@Param('id') id: string, @Req() req: any) {
     const isAdmin = await this.users.isAdmin(req.user.sub);
     return this.marketplace.archiveProduct(id, req.user.sub, isAdmin);
+  }
+
+  @UseGuards(OptionalJwtGuard)
+  @Post('products/:id/share')
+  share(@Param('id') id: string, @Body() body: { channel?: string }, @Req() req: any) {
+    return this.marketplace.recordShare(id, req.user?.sub, String(body?.channel ?? 'native'));
+  }
+
+  /// Déclaré en dernier : `products/mine` doit être résolu avant `:id`.
+  @Get('products/:id')
+  product(@Param('id') id: string) {
+    return this.marketplace.getProduct(id);
   }
 }

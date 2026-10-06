@@ -1,6 +1,7 @@
 import { Injectable, BadRequestException, ForbiddenException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { WalletService } from '../wallet/wallet.service';
+import { PointsService } from '../points/points.service';
 
 /// Écart entre le début de chaque ronde du bracket — donne un vrai « emploi
 /// du temps » du tournoi sans dépendre de la durée réelle des parties.
@@ -8,7 +9,7 @@ const ROUND_GAP_MINUTES = 25;
 
 @Injectable()
 export class GamesService {
-  constructor(private prisma: PrismaService, private wallet: WalletService) {}
+  constructor(private prisma: PrismaService, private wallet: WalletService, private points: PointsService) {}
 
   private async ensureDefaultTournaments() {
     const count = await this.prisma.tournament.count();
@@ -63,7 +64,7 @@ export class GamesService {
     if (tournament.startsAt <= new Date()) throw new BadRequestException('Tournament already started');
 
     try {
-      return await this.prisma.$transaction(async (tx) => {
+      const result = await this.prisma.$transaction(async (tx) => {
         const existing = await tx.tournamentParticipant.findUnique({
           where: { tournamentId_userId: { tournamentId, userId } },
         });
@@ -88,10 +89,70 @@ export class GamesService {
         const participant = await tx.tournamentParticipant.create({ data: { tournamentId, userId } });
         return { ok: true, alreadyJoined: false, participant };
       });
+      // Points seulement pour les tournois payants : un tournoi gratuit
+      // pourrait être créé/rejoint en boucle pour farmer des points.
+      if (!result.alreadyJoined && Number(tournament.entryFee) > 0) {
+        await this.points.award(userId, 'tournament_join', tournamentId);
+      }
+      return result;
     } catch (error: any) {
       if (error?.code === 'P2002') return { ok: true, alreadyJoined: true };
       throw error;
     }
+  }
+
+  /// Classement d'un jeu en ligne : victoires enregistrées par le serveur
+  /// (jamais déclarées par l'app). Les jeux joués en local n'y figurent pas.
+  async leaderboard(slug: string, limit: number) {
+    const [wins, played] = await Promise.all([
+      this.prisma.match.groupBy({
+        by: ['winnerId'],
+        where: { game: { slug }, winnerId: { not: null } },
+        _count: { _all: true },
+        orderBy: { _count: { winnerId: 'desc' } },
+        take: limit,
+      }),
+      this.prisma.gamePlayer.groupBy({
+        by: ['userId'],
+        where: { match: { game: { slug }, state: { contains: '"finished"' } } },
+        _count: { _all: true },
+      }),
+    ]);
+    const ids = wins.map((w) => w.winnerId!).filter(Boolean);
+    const users = await this.prisma.user.findMany({
+      where: { id: { in: ids } },
+      select: { id: true, username: true, displayName: true, avatarColor: true, avatarImage: true },
+    });
+    const byId = new Map(users.map((u) => [u.id, u]));
+    const playedById = new Map(played.map((p) => [p.userId, p._count._all]));
+    return wins
+      .filter((w) => byId.has(w.winnerId!))
+      .map((w, i) => {
+        const u = byId.get(w.winnerId!)!;
+        return {
+          rank: i + 1,
+          userId: u.id,
+          name: u.displayName || u.username,
+          avatarColor: u.avatarColor,
+          avatarImage: u.avatarImage,
+          wins: w._count._all,
+          played: playedById.get(u.id) ?? w._count._all,
+        };
+      });
+  }
+
+  /// Joueurs distincts et parties terminées par jeu (cartes de la page Jeux).
+  async stats() {
+    const games = await this.prisma.game.findMany({ select: { id: true, slug: true } });
+    return Promise.all(
+      games.map(async (g) => {
+        const [players, matches] = await Promise.all([
+          this.prisma.gamePlayer.findMany({ where: { match: { gameId: g.id } }, distinct: ['userId'], select: { userId: true } }),
+          this.prisma.match.count({ where: { gameId: g.id } }),
+        ]);
+        return { slug: g.slug, players: players.length, matches };
+      }),
+    );
   }
 
   /// Génère le bracket (rondes + horaires) une seule fois — idempotent : un

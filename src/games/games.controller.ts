@@ -1,10 +1,21 @@
-import { Body, Controller, Get, Param, Post, Req, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Param, Post, Query, Req, UseGuards } from '@nestjs/common';
+import { clampInt } from '../common/pagination';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { GamesService } from './games.service';
 
 @Controller('games')
 export class GamesController {
   constructor(private games: GamesService) {}
+
+  @Get('stats')
+  stats() {
+    return this.games.stats();
+  }
+
+  @Get(':slug/leaderboard')
+  leaderboard(@Param('slug') slug: string, @Query('limit') limit?: string) {
+    return this.games.leaderboard(slug, clampInt(limit, 20, 1, 100));
+  }
 
   @Get('tournaments')
   listTournaments() {

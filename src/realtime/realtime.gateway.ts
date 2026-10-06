@@ -13,6 +13,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { UsersService } from '../users/users.service';
 import { AuthService } from '../auth/auth.service';
 import { WalletService } from '../wallet/wallet.service';
+import { PointsService } from '../points/points.service';
 import { Chess } from 'chess.js';
 
 const MIN_STAKE = 2000; // Ar — mise minimale imposée.
@@ -68,6 +69,7 @@ export class RealtimeGateway implements OnGatewayConnection, OnGatewayDisconnect
     private users: UsersService,
     private auth: AuthService,
     private wallet: WalletService,
+    private points: PointsService,
   ) {}
 
   handleConnection(socket: Socket) {
@@ -503,6 +505,16 @@ export class RealtimeGateway implements OnGatewayConnection, OnGatewayDisconnect
     return { ok: true };
   }
 
+  /// Karataka Points de fin de partie — en tâche de fond, n'affecte jamais
+  /// le résultat ni les mises.
+  private awardChessPoints(room: ChessRoom, winnerId: string | null) {
+    if (!room.matchId || !room.whiteId || !room.blackId) return;
+    const fullMoves = Number(room.fen.split(' ')[5]) || 0;
+    this.points
+      .awardChessResult(room.matchId, [room.whiteId, room.blackId], winnerId, fullMoves)
+      .catch((error) => this.logger.warn(`points: ${(error as Error).message}`));
+  }
+
   /**
    * Clôture une partie (une seule fois) : enregistre le résultat, règle les
    * mises et prévient les deux joueurs.
@@ -519,6 +531,7 @@ export class RealtimeGateway implements OnGatewayConnection, OnGatewayDisconnect
         },
       });
     }
+    this.awardChessPoints(room, winnerId);
 
     let payout: { fee: string; payout: string } | null = null;
 
@@ -647,6 +660,7 @@ export class RealtimeGateway implements OnGatewayConnection, OnGatewayDisconnect
           },
         });
       }
+      this.awardChessPoints(room, winnerId);
       // Partie payante abandonnée : l'adversaire encore présent remporte la mise.
       if (room.stake > 0 && room.betsPlaced) {
         if (winnerId) {

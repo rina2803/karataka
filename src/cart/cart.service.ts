@@ -1,4 +1,5 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import { PointsService } from '../points/points.service';
 import { PrismaService } from '../prisma/prisma.service';
 
 /// Mêmes règles de commission que la boutique instantanée (marketplace.service.ts).
@@ -37,7 +38,7 @@ function validPosition(lat?: number, lng?: number) {
 
 @Injectable()
 export class CartService {
-  constructor(private prisma: PrismaService) {}
+  constructor(private prisma: PrismaService, private points: PointsService) {}
 
   async checkout(userId: string, body: CheckoutBody) {
     if (!Array.isArray(body.items) || body.items.length === 0) {
@@ -168,7 +169,7 @@ export class CartService {
     if (!order) throw new NotFoundException('Commande introuvable');
     if (order.status !== 'approved') throw new BadRequestException('La commande doit être validée avant la livraison');
 
-    return this.prisma.$transaction(async (tx) => {
+    const result = await this.prisma.$transaction(async (tx) => {
       for (const item of order.items) {
         if (!item.sellerId) continue;
         const lineTotal = Number(item.unitPrice) * item.quantity;
@@ -199,6 +200,9 @@ export class CartService {
       await tx.cartOrder.update({ where: { id }, data: { status: 'delivered', deliveredAt: new Date() } });
       return { ok: true };
     });
+    // Points d'achat seulement une fois la livraison confirmée par l'admin.
+    await this.points.award(order.userId, 'purchase', `cart:${id}`);
+    return result;
   }
 
   async reject(id: string, reviewNote?: string) {
