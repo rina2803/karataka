@@ -50,23 +50,43 @@ export class NotificationsService {
     return this.messaging !== null;
   }
 
+  /// Diagnostic lisible par l'admin (jamais le contenu de la clé).
+  private pushStatus = 'non configuré';
+
   private initFirebase() {
+    const sources: [string, string | undefined][] = [
+      ['FIREBASE_SERVICE_ACCOUNT', process.env.FIREBASE_SERVICE_ACCOUNT],
+      ['FIREBASE_SERVICE_ACCOUNT_JSON', process.env.FIREBASE_SERVICE_ACCOUNT_JSON],
+      ['GOOGLE_APPLICATION_CREDENTIALS_JSON', process.env.GOOGLE_APPLICATION_CREDENTIALS_JSON],
+    ];
+    const path = process.env.FCM_SERVICE_ACCOUNT_PATH?.trim() || process.env.GOOGLE_APPLICATION_CREDENTIALS?.trim();
+    if (path && fs.existsSync(path)) sources.push([`fichier ${path}`, fs.readFileSync(path, 'utf8')]);
+    const found = sources.find(([, v]) => v && v.trim());
+    if (!found) {
+      this.pushStatus = 'variable FIREBASE_SERVICE_ACCOUNT absente sur le serveur';
+      this.log.log('Firebase non configuré : notifications push désactivées');
+      return;
+    }
+    const [name, raw] = found;
     try {
-      let raw = process.env.FIREBASE_SERVICE_ACCOUNT?.trim();
-      const path = process.env.FCM_SERVICE_ACCOUNT_PATH?.trim();
-      if (!raw && path && fs.existsSync(path)) raw = fs.readFileSync(path, 'utf8');
-      if (!raw) {
-        this.log.log('Firebase non configuré : notifications push désactivées');
-        return;
+      const account = parseServiceAccount(raw!);
+      for (const key of ['project_id', 'client_email', 'private_key']) {
+        if (!account[key]) throw new Error(`champ « ${key} » manquant`);
       }
       const app = admin.apps.length
         ? admin.app()
-        : admin.initializeApp({ credential: admin.credential.cert(JSON.parse(raw)) });
+        : admin.initializeApp({ credential: admin.credential.cert(account as admin.ServiceAccount) });
       this.messaging = app.messaging();
-      this.log.log('Firebase Cloud Messaging activé');
+      this.pushStatus = `actif (projet ${account.project_id}, via ${name})`;
+      this.log.log(`Firebase Cloud Messaging activé : ${this.pushStatus}`);
     } catch (error) {
-      this.log.warn(`Firebase invalide, push désactivé : ${(error as Error).message}`);
+      this.pushStatus = `clé invalide dans ${name} : ${(error as Error).message}`;
+      this.log.warn(`Firebase invalide, push désactivé : ${this.pushStatus}`);
     }
+  }
+
+  status() {
+    return { push: this.pushEnabled, detail: this.pushStatus };
   }
 
   async notifyUser(userId: string, input: NotificationInput) {
@@ -187,4 +207,27 @@ function safeJson(raw: string) {
   } catch {
     return null;
   }
+}
+
+/// Accepte le JSON brut, entouré de guillemets, ou encodé en base64 ; répare
+/// les « \n » de la clé privée quand le copier-coller les a doublés.
+function parseServiceAccount(raw: string): Record<string, string> {
+  let text = raw.trim();
+  if ((text.startsWith("'") && text.endsWith("'")) || (text.startsWith('"') && text.endsWith('"') && !text.startsWith('"{'))) {
+    text = text.slice(1, -1).trim();
+  }
+  if (!text.startsWith('{')) {
+    const decoded = Buffer.from(text, 'base64').toString('utf8').trim();
+    if (!decoded.startsWith('{')) throw new Error("ce n'est pas le contenu JSON de la clé");
+    text = decoded;
+  }
+  let account: Record<string, string>;
+  try {
+    account = JSON.parse(text);
+  } catch {
+    throw new Error('JSON illisible (copier tout le fichier, accolades comprises)');
+  }
+  // « \n » restés littéraux (texte collé échappé deux fois) → vrais retours.
+  if (account.private_key) account.private_key = account.private_key.replace(/\\n/g, '\n');
+  return account;
 }

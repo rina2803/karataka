@@ -50,6 +50,12 @@ export class NotificationsController {
 export class AdminNotificationsController {
   constructor(private notifications: NotificationsService, private prisma: PrismaService) {}
 
+  /// État de l'envoi sur téléphone (Firebase) pour l'écran admin.
+  @Get('status')
+  status() {
+    return this.notifications.status();
+  }
+
   @Post()
   async send(@Body() body: { title?: string; body?: string; target?: 'all' | 'user'; userId?: string }) {
     const title = body?.title?.trim() ?? '';
