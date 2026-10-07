@@ -27,6 +27,10 @@ const { runtime, push } = prepareDatabaseUrl();
 
 try {
   execSync('node scripts/prisma-provider.js', { stdio: 'inherit' });
+  // Le client Prisma est régénéré ici : la compilation sur Render peut ne
+  // pas voir DATABASE_URL et produire un client SQLite, refusé ensuite par
+  // une base PostgreSQL (« the URL must start with the protocol file: »).
+  execSync('npx prisma generate', { stdio: 'inherit' });
   execSync('npx prisma db push --skip-generate', { stdio: 'inherit', env: { ...process.env, DATABASE_URL: push } });
 } catch (error) {
   console.error('prisma db push a échoué ; démarrage quand même pour garder /health :', error.message);
