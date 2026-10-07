@@ -171,15 +171,27 @@ export class RealtimeGateway implements OnGatewayInit, OnGatewayConnection, OnGa
   }
 
   @SubscribeMessage('chat')
-  async handleChat(@MessageBody() data: { room: string; userId: string; content: string }) {
+  async handleChat(
+    @MessageBody() data: { room: string; userId: string; content: string },
+    @ConnectedSocket() socket: Socket,
+  ) {
+    const content = String(data?.content ?? '').trim().slice(0, 500);
+    if (!data?.room || !content) return;
+    // L'auteur vient de la session, jamais du message : le pseudo affiché
+    // dans la discussion ne peut pas être usurpé.
+    const authUserId = this.userId(socket);
+    const userId = authUserId && !authUserId.startsWith('guest-') ? authUserId : data.userId;
+    let username: string | undefined;
     try {
-      await this.prisma.message.create({
-        data: { roomId: data.room, userId: data.userId, content: data.content },
-      });
+      const user = await this.prisma.user.findUnique({ where: { id: userId }, select: { username: true } });
+      username = user?.username;
+      if (user) {
+        await this.prisma.message.create({ data: { roomId: data.room, userId, content } });
+      }
     } catch (e) {
       console.error('persist chat failed', e);
     }
-    this.server.to(data.room).emit('chat', data);
+    this.server.to(data.room).emit('chat', { room: data.room, userId, username: username ?? 'Invité', content });
   }
 
   // ————————————————————————————————————————————————————————————

@@ -7,6 +7,8 @@ import { PrismaService } from '../prisma/prisma.service';
 export const POINT_RULES = {
   chess_win: { amount: 50, label: "Partie d'échecs gagnée", dailyCap: 10 },
   chess_play: { amount: 10, label: "Partie d'échecs jouée", dailyCap: 5 },
+  game_win: { amount: 30, label: 'Partie en ligne gagnée', dailyCap: 10 },
+  game_play: { amount: 5, label: 'Partie en ligne jouée', dailyCap: 10 },
   purchase: { amount: 100, label: 'Achat effectué', dailyCap: 5 },
   tournament_join: { amount: 20, label: 'Inscription à un tournoi', dailyCap: 3 },
   share_product: { amount: 5, label: 'Produit partagé', dailyCap: 3 },
@@ -79,6 +81,29 @@ export class PointsService {
     });
     if (winsVsOpponent >= MAX_WINS_VS_SAME_OPPONENT_PER_DAY) return;
     await this.award(winnerId, 'chess_win', `${matchId}:${opponentId}`);
+  }
+
+  /// Points de fin de partie des autres jeux en ligne (dames, fanorona,
+  /// ludo, belote, domino, morpion, puissance 4, quiz). Appelé uniquement
+  /// par le serveur de jeu, pour des parties sans bot assez longues.
+  async awardGameResult(matchId: string, playerIds: string[], winnerIds: string[]) {
+    if (playerIds.length < 2) return;
+    for (const id of playerIds) await this.award(id, 'game_play', `${matchId}:${id}`);
+    for (const winnerId of winnerIds) {
+      const opponents = playerIds.filter((id) => id !== winnerId && !winnerIds.includes(id));
+      // Une victoire « farmée » contre le même adversaire ne rapporte que 2 fois par jour.
+      const key = opponents.sort().join(',');
+      const already = await this.prisma.pointTransaction.count({
+        where: {
+          userId: winnerId,
+          reason: 'game_win',
+          refKey: { endsWith: `:${key}` },
+          createdAt: { gte: startOfMadagascarDay() },
+        },
+      });
+      if (already >= MAX_WINS_VS_SAME_OPPONENT_PER_DAY) continue;
+      await this.award(winnerId, 'game_win', `${matchId}:${winnerId}:${key}`);
+    }
   }
 
   async summary(userId: string) {

@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Post, Req, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Param, Post, Req, UseGuards } from '@nestjs/common';
 import { CartService } from './cart.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 
@@ -25,5 +25,14 @@ export class CartController {
   @Get('orders/mine')
   mine(@Req() req: any) {
     return this.cart.myOrders(req.user.sub);
+  }
+
+  @Post('orders/:id/review')
+  review(
+    @Param('id') id: string,
+    @Body() body: { sellerId?: string; rating?: number; comment?: string },
+    @Req() req: any,
+  ) {
+    return this.cart.review(req.user.sub, id, body);
   }
 }

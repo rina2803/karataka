@@ -7,6 +7,25 @@ import * as jwt from 'jsonwebtoken';
 export class AuthService {
   constructor(private prisma: PrismaService) {}
 
+  /// Comptes dont l'existence a été vérifiée récemment (id → expiration),
+  /// pour ne pas interroger la base à chaque requête authentifiée.
+  private knownUsers = new Map<string, number>();
+
+  /// Un jeton peut rester valide alors que son compte n'existe plus (base
+  /// réinitialisée, compte supprimé) : l'app doit alors se déconnecter au
+  /// lieu d'échouer sur chaque action.
+  async userExists(userId: string): Promise<boolean> {
+    const until = this.knownUsers.get(userId);
+    if (until && until > Date.now()) return true;
+    const user = await this.prisma.user.findUnique({ where: { id: userId }, select: { id: true } });
+    if (!user) {
+      this.knownUsers.delete(userId);
+      return false;
+    }
+    this.knownUsers.set(userId, Date.now() + 60_000);
+    return true;
+  }
+
   async register(data: { username: string; email: string; phone: string; password: string }) {
     const hashed = await bcrypt.hash(data.password, 10);
     const user = await this.prisma.user.create({

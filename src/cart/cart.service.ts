@@ -153,12 +153,68 @@ export class CartService {
     return order;
   }
 
-  myOrders(userId: string) {
-    return this.prisma.cartOrder.findMany({
+  /// Commandes du client, avec pour chaque commande livrée la liste des
+  /// vendeurs à noter (et la note déjà donnée).
+  async myOrders(userId: string) {
+    const orders = await this.prisma.cartOrder.findMany({
       where: { userId },
       orderBy: { createdAt: 'desc' },
       include: { items: { include: { product: { select: { name: true, imageUrl: true } } } } },
     });
+    const sellerIds = [...new Set(orders.flatMap((o) => o.items.map((i) => i.sellerId)).filter((v): v is string => !!v))];
+    const [sellers, reviews] = await Promise.all([
+      this.prisma.user.findMany({ where: { id: { in: sellerIds } }, select: { id: true, username: true, displayName: true } }),
+      this.prisma.sellerReview.findMany({
+        where: { userId, orderId: { in: orders.map((o) => o.id) } },
+        select: { orderId: true, sellerId: true, rating: true, comment: true },
+      }),
+    ]);
+    const sellerName = new Map(sellers.map((s) => [s.id, s.displayName || s.username]));
+    return orders.map((o) => {
+      const ids = [...new Set(o.items.map((i) => i.sellerId).filter((v): v is string => !!v))];
+      return {
+        ...o,
+        sellers: ids.map((id) => {
+          const review = reviews.find((r) => r.orderId === o.id && r.sellerId === id);
+          return { id, name: sellerName.get(id) ?? 'Vendeur', rating: review?.rating ?? null, comment: review?.comment ?? null };
+        }),
+      };
+    });
+  }
+
+  /// Note de satisfaction 1 à 5 du client pour un vendeur de sa commande,
+  /// possible uniquement après la livraison. Renvoyer une note la modifie.
+  async review(userId: string, orderId: string, body: { sellerId?: string; rating?: number; comment?: string }) {
+    const rating = Math.trunc(Number(body.rating));
+    if (!Number.isFinite(rating) || rating < 1 || rating > 5) {
+      throw new BadRequestException('La note doit être comprise entre 1 et 5');
+    }
+    const order = await this.prisma.cartOrder.findUnique({ where: { id: orderId }, include: { items: true } });
+    if (!order || order.userId !== userId) throw new NotFoundException('Commande introuvable');
+    if (order.status !== 'delivered') {
+      throw new BadRequestException('Vous pourrez noter le vendeur après la livraison');
+    }
+    const sellerIds = [...new Set(order.items.map((i) => i.sellerId).filter((v): v is string => !!v))];
+    const sellerId = body.sellerId ?? (sellerIds.length === 1 ? sellerIds[0] : undefined);
+    if (!sellerId || !sellerIds.includes(sellerId)) {
+      throw new BadRequestException('Ce vendeur ne fait pas partie de la commande');
+    }
+    const comment = body.comment?.trim().slice(0, 500) || null;
+    const existing = await this.prisma.sellerReview.findUnique({ where: { orderId_sellerId: { orderId, sellerId } } });
+    const review = await this.prisma.sellerReview.upsert({
+      where: { orderId_sellerId: { orderId, sellerId } },
+      create: { orderId, sellerId, userId, rating, comment },
+      update: { rating, comment },
+    });
+    if (!existing) {
+      await this.notifications.notifyUser(sellerId, {
+        type: 'review',
+        title: `Nouvelle note : ${'★'.repeat(rating)}${'☆'.repeat(5 - rating)}`,
+        body: comment ? `« ${comment.slice(0, 120)} »` : 'Un client a noté votre boutique après sa livraison.',
+        data: { orderId, screen: 'seller-orders' },
+      });
+    }
+    return review;
   }
 
   listOrders(status?: string) {
@@ -206,7 +262,7 @@ export class CartService {
       type: 'order',
       title: 'Nouvelle vente à préparer',
       body: 'Une commande contenant vos produits vient d\'être validée.',
-      data: { orderId: id },
+      data: { orderId: id, screen: 'seller-orders' },
     });
     return { ok: true };
   }
@@ -254,7 +310,9 @@ export class CartService {
     await this.notifications.notifyUser(order.userId, {
       type: 'order',
       title: 'Commande livrée 📦',
-      body: earned > 0 ? `Merci pour votre achat ! +${earned} Karataka Points.` : 'Merci pour votre achat !',
+      body:
+        (earned > 0 ? `Merci pour votre achat ! +${earned} Karataka Points.` : 'Merci pour votre achat !') +
+        (order.items.some((i) => i.sellerId) ? ' Donnez une note de 1 à 5 au vendeur ⭐' : ''),
       data: { orderId: id, screen: 'orders' },
     });
     const sellerIds = order.items.map((i) => i.sellerId).filter((v): v is string => !!v);

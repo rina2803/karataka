@@ -40,6 +40,8 @@ model User {
   productShares      ProductShare[]
   /// Magasin partenaire / vendeur mis en avant par l'admin (accueil, boutique).
   isPartner          Boolean                 @default(false)
+  /// Courte présentation du magasin partenaire, saisie par l'admin.
+  partnerDescription String?
   notifications      Notification[]
   devices            DeviceToken[]
 }
@@ -417,4 +419,36 @@ model Message {
   userId    String
   content   String
   createdAt DateTime @default(now())
+}
+
+/// Note de satisfaction (1 à 5) laissée par un client pour un vendeur, une
+/// fois sa commande livrée. Une seule note par commande et par vendeur
+/// (modifiable par le client).
+model SellerReview {
+  id        String   @id @default(cuid())
+  orderId   String
+  sellerId  String
+  userId    String
+  rating    Int
+  comment   String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([orderId, sellerId])
+  @@index([sellerId, createdAt])
+}
+
+/// Offre d'emploi publiée par l'admin sous forme d'affiche (image), visible
+/// dans l'onglet Emplois.
+model JobOffer {
+  id          String   @id @default(cuid())
+  title       String?
+  description String?
+  contact     String?
+  mimeType    String   @default("image/jpeg")
+  imageData   String
+  active      Boolean  @default(true)
+  createdAt   DateTime @default(now())
+
+  @@index([active, createdAt])
 }

@@ -2,6 +2,9 @@ import { BadRequestException, Injectable, NotFoundException } from '@nestjs/comm
 import { NotificationsService } from '../notifications/notifications.service';
 import { PrismaService } from '../prisma/prisma.service';
 
+/// Commission plateforme, identique à cart.service.ts.
+const COMMISSION_RATE = 0.05;
+
 @Injectable()
 export class SellerService {
   constructor(private prisma: PrismaService, private notifications: NotificationsService) {}
@@ -40,6 +43,97 @@ export class SellerService {
       data: { applicationId: application.id, screen: 'admin-sellers' },
     });
     return { ok: true, alreadySubmitted: false, application };
+  }
+
+  /// Espace vendeur : les commandes contenant au moins un produit du
+  /// vendeur, avec seulement SES lignes (pas celles des autres vendeurs).
+  /// Statuts : pending = commandée (en validation), approved = validée
+  /// (en livraison), delivered = livrée et payée au vendeur, rejected.
+  async orders(sellerId: string, status?: string) {
+    const statusFilter = ['pending', 'approved', 'delivered', 'rejected'].includes(status ?? '') ? status : undefined;
+    const orders = await this.prisma.cartOrder.findMany({
+      where: { items: { some: { sellerId } }, ...(statusFilter ? { status: statusFilter } : {}) },
+      orderBy: { createdAt: 'desc' },
+      take: 200,
+      include: {
+        user: { select: { username: true, displayName: true } },
+        items: { where: { sellerId }, include: { product: { select: { id: true, name: true, imageUrl: true } } } },
+      },
+    });
+    const reviews = await this.prisma.sellerReview.findMany({
+      where: { sellerId, orderId: { in: orders.map((o) => o.id) } },
+      select: { orderId: true, rating: true, comment: true },
+    });
+    const reviewByOrder = new Map(reviews.map((r) => [r.orderId, r]));
+
+    return orders.map((o) => {
+      const total = o.items.reduce((sum, i) => sum + Number(i.unitPrice) * i.quantity, 0);
+      const commission = Math.round(total * COMMISSION_RATE);
+      // Coordonnées de livraison visibles seulement une fois la commande
+      // validée par l'admin (le vendeur doit alors préparer l'envoi).
+      const showContact = o.status === 'approved' || o.status === 'delivered';
+      return {
+        id: o.id,
+        status: o.status,
+        createdAt: o.createdAt,
+        reviewedAt: o.reviewedAt,
+        deliveredAt: o.deliveredAt,
+        paymentMethod: o.paymentMethod,
+        buyer: o.user.username,
+        deliveryCity: o.deliveryCity,
+        deliveryName: showContact ? o.deliveryName : null,
+        deliveryPhone: showContact ? o.deliveryPhone : null,
+        deliveryAddress: showContact ? o.deliveryAddress : null,
+        items: o.items.map((i) => ({
+          productId: i.productId,
+          name: i.product?.name ?? 'Produit',
+          imageUrl: i.product?.imageUrl ?? null,
+          quantity: i.quantity,
+          unitPrice: Number(i.unitPrice),
+        })),
+        total,
+        commission,
+        payout: total - commission,
+        review: reviewByOrder.get(o.id) ?? null,
+      };
+    });
+  }
+
+  /// Chiffres de l'espace vendeur : nombre de commandes par statut, chiffre
+  /// d'affaires encaissé (livré) et note moyenne.
+  async summary(sellerId: string) {
+    const [items, rating] = await Promise.all([
+      this.prisma.cartOrderItem.findMany({
+        where: { sellerId },
+        select: { orderId: true, quantity: true, unitPrice: true, order: { select: { status: true } } },
+      }),
+      this.prisma.sellerReview.aggregate({ where: { sellerId }, _avg: { rating: true }, _count: { _all: true } }),
+    ]);
+    const ordersByStatus: Record<string, Set<string>> = {
+      pending: new Set(), approved: new Set(), delivered: new Set(), rejected: new Set(),
+    };
+    let paidRevenue = 0;
+    let pendingRevenue = 0;
+    let soldUnits = 0;
+    for (const item of items) {
+      const st = item.order.status;
+      ordersByStatus[st]?.add(item.orderId);
+      const line = Number(item.unitPrice) * item.quantity;
+      if (st === 'delivered') {
+        paidRevenue += line - Math.round(line * COMMISSION_RATE);
+        soldUnits += item.quantity;
+      } else if (st === 'approved') {
+        pendingRevenue += line - Math.round(line * COMMISSION_RATE);
+      }
+    }
+    return {
+      counts: Object.fromEntries(Object.entries(ordersByStatus).map(([k, v]) => [k, v.size])),
+      paidRevenue,
+      pendingRevenue,
+      soldUnits,
+      ratingAvg: rating._avg.rating ? Math.round(rating._avg.rating * 10) / 10 : null,
+      ratingCount: rating._count._all,
+    };
   }
 
   async status(userId: string) {

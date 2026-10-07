@@ -24,6 +24,9 @@ export class JwtAuthGuard implements CanActivate {
     if (!token) throw new UnauthorizedException('Missing authentication token');
     const payload = this.authService.verifyToken(token);
     if (!payload) throw new UnauthorizedException('Invalid authentication token');
+    if (!(await this.authService.userExists(payload.sub))) {
+      throw new UnauthorizedException('Account no longer exists');
+    }
     request.user = payload;
     return true;
   }

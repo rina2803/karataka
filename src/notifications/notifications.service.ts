@@ -12,6 +12,8 @@ export type NotificationType =
   | 'game'
   | 'follow'
   | 'admin'
+  | 'review'
+  | 'job'
   | 'system';
 
 export type NotificationInput = {

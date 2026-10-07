@@ -26,6 +26,11 @@ export class SellersController {
     return this.sellers.following(req.user.sub);
   }
 
+  @Get(':id/reviews')
+  reviews(@Param('id') id: string) {
+    return this.sellers.reviews(id);
+  }
+
   @UseGuards(OptionalJwtGuard)
   @Get(':id')
   profile(@Param('id') id: string, @Req() req: any) {
@@ -56,8 +61,19 @@ export class AdminPartnersController {
     return this.sellers.adminList();
   }
 
+  /// Recherche d'un compte (pseudo, nom, email, téléphone) à ajouter comme partenaire.
+  @Get('search')
+  search(@Query('q') q?: string) {
+    return this.sellers.adminSearch(q ?? '');
+  }
+
+  /// Ajoute/retire un partenaire et/ou modifie sa fiche (nom affiché,
+  /// présentation, logo en base64).
   @Patch(':id')
-  set(@Param('id') id: string, @Body() body: { isPartner?: boolean }) {
-    return this.sellers.setPartner(id, body?.isPartner === true);
+  set(
+    @Param('id') id: string,
+    @Body() body: { isPartner?: boolean; displayName?: string; partnerDescription?: string; logo?: string | null },
+  ) {
+    return this.sellers.updatePartner(id, body ?? {});
   }
 }

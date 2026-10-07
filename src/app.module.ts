@@ -20,6 +20,8 @@ import { AppReleaseModule } from './app-release/app-release.module';
 import { PointsModule } from './points/points.module';
 import { ShareModule } from './share/share.module';
 import { NotificationsModule } from './notifications/notifications.module';
+import { JobsModule } from './jobs/jobs.module';
+import { ArenaModule } from './arena/arena.module';
 
 @Module({
   imports: [
@@ -35,6 +37,8 @@ import { NotificationsModule } from './notifications/notifications.module';
     AuctionModule,
     FairModule,
     SellerModule,
+    JobsModule,
+    ArenaModule,
     CartModule,
     HomeModule,
     AppReleaseModule,
