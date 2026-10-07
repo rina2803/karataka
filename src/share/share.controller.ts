@@ -1,6 +1,7 @@
 import { Controller, Get, Header, Param, Req, Res } from '@nestjs/common';
 import type { Request, Response } from 'express';
 import { PrismaService } from '../prisma/prisma.service';
+import { SettingsService } from '../settings/settings.service';
 import { fallbackProductImage } from '../seed-catalog';
 
 const ANDROID_PACKAGE = process.env.ANDROID_PACKAGE || 'com.lalao.karataka.lalao_app';
@@ -19,10 +20,10 @@ function formatAr(value: unknown) {
 /// Aucune API Meta/TikTok n'est utilisée : simple lien web standard.
 @Controller()
 export class ShareController {
-  constructor(private prisma: PrismaService) {}
+  constructor(private prisma: PrismaService, private settings: SettingsService) {}
 
   private baseUrl(req: Request) {
-    const configured = process.env.PUBLIC_WEB_URL?.replace(/\/+$/, '');
+    const configured = this.settings.get('PUBLIC_WEB_URL').replace(/\/+$/, '');
     if (configured) return configured;
     const proto = (req.headers['x-forwarded-proto'] as string)?.split(',')[0] || req.protocol;
     return `${proto}://${req.get('host')}`;

@@ -1,4 +1,5 @@
 import { Injectable, Logger, ServiceUnavailableException } from '@nestjs/common';
+import { SettingsService } from '../settings/settings.service';
 
 /// Appels à l'API Google Gemini, uniquement côté serveur : la clé
 /// GEMINI_API_KEY ne quitte jamais le serveur. Les noms de modèles sont
@@ -15,20 +16,22 @@ interface Part {
 export class GeminiService {
   private readonly log = new Logger(GeminiService.name);
 
+  constructor(private settings: SettingsService) {}
+
   get enabled() {
-    return !!process.env.GEMINI_API_KEY;
+    return !!this.settings.get('GEMINI_API_KEY');
   }
 
   private get textModel() {
-    return process.env.GEMINI_TEXT_MODEL || 'gemini-2.5-flash';
+    return this.settings.get('GEMINI_TEXT_MODEL') || 'gemini-2.5-flash';
   }
 
   private get imageModel() {
-    return process.env.GEMINI_IMAGE_MODEL || 'gemini-2.5-flash-image';
+    return this.settings.get('GEMINI_IMAGE_MODEL') || 'gemini-2.5-flash-image';
   }
 
   private async call(model: string, parts: Part[], generationConfig: Record<string, unknown>) {
-    const key = process.env.GEMINI_API_KEY;
+    const key = this.settings.get('GEMINI_API_KEY');
     if (!key) throw new ServiceUnavailableException("L'IA n'est pas encore activée sur Karataka");
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), 90_000);
@@ -42,6 +45,12 @@ export class GeminiService {
       const body: any = await res.json().catch(() => ({}));
       if (!res.ok) {
         this.log.warn(`Gemini ${model} ${res.status}: ${JSON.stringify(body?.error ?? body).slice(0, 300)}`);
+        if ([400, 401, 403].includes(res.status) && /api.?key/i.test(JSON.stringify(body?.error ?? ''))) {
+          throw new ServiceUnavailableException('Clé Gemini refusée par Google : vérifiez-la dans Admin → Paramètres');
+        }
+        if (res.status === 404) {
+          throw new ServiceUnavailableException(`Modèle Gemini « ${model} » introuvable : changez-le dans Admin → Paramètres`);
+        }
         throw new ServiceUnavailableException("Le service d'IA est momentanément indisponible");
       }
       return (body?.candidates?.[0]?.content?.parts ?? []) as Part[];
@@ -52,6 +61,12 @@ export class GeminiService {
     } finally {
       clearTimeout(timer);
     }
+  }
+
+  /// Test de la clé depuis l'écran admin : petite requête texte.
+  async ping() {
+    const out = await this.json<{ ok?: boolean }>('Réponds exactement {"ok": true}');
+    return out.ok === true;
   }
 
   /// Réponse JSON structurée (le modèle est contraint au format JSON).

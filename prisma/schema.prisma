@@ -500,3 +500,11 @@ model DailySpin {
 
   @@unique([userId, day])
 }
+
+/// Réglages modifiables par l'admin depuis l'app (clé Gemini, application
+/// Facebook, adresse publique). Prioritaires sur les variables d'environnement.
+model AppSetting {
+  key       String   @id
+  value     String
+  updatedAt DateTime @updatedAt
+}

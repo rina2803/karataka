@@ -2,6 +2,7 @@ import { Body, Controller, Delete, Get, Param, Post, Query, Req, Res, UseGuards 
 import type { Request, Response } from 'express';
 import { AdminGuard } from '../auth/admin.guard';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import { SettingsService } from '../settings/settings.service';
 import { SocialService } from './social.service';
 
 function esc(value: unknown) {
@@ -11,10 +12,6 @@ function esc(value: unknown) {
 function apiBase(req: Request) {
   const proto = (req.headers['x-forwarded-proto'] as string)?.split(',')[0] || req.protocol;
   return `${proto}://${req.get('host')}`;
-}
-
-function publicBase(req: Request) {
-  return process.env.PUBLIC_WEB_URL?.replace(/\/+$/, '') || apiBase(req);
 }
 
 /// Page affichée dans le navigateur à la fin de la connexion Facebook.
@@ -28,7 +25,11 @@ a.b{display:block;padding:14px;border-radius:14px;background:#1F4FE0;color:#fff;
 
 @Controller()
 export class SocialController {
-  constructor(private social: SocialService) {}
+  constructor(private social: SocialService, private settings: SettingsService) {}
+
+  private publicBase(req: Request) {
+    return this.settings.get('PUBLIC_WEB_URL').replace(/\/+$/, '') || apiBase(req);
+  }
 
   @UseGuards(JwtAuthGuard)
   @Get('social/accounts')
@@ -92,7 +93,7 @@ export class SocialController {
   @UseGuards(JwtAuthGuard, AdminGuard)
   @Post('admin/social-posts/:id/approve')
   approve(@Param('id') id: string, @Req() req: Request) {
-    return this.social.approve(id, publicBase(req));
+    return this.social.approve(id, this.publicBase(req));
   }
 
   @UseGuards(JwtAuthGuard, AdminGuard)

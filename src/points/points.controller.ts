@@ -2,11 +2,12 @@ import { Controller, Get, Post, Query, Req, UseGuards } from '@nestjs/common';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { clampInt } from '../common/pagination';
 import { PointsService } from './points.service';
+import { SettingsService } from '../settings/settings.service';
 
 /// Lecture seule : les points ne s'attribuent que côté serveur.
 @Controller('points')
 export class PointsController {
-  constructor(private points: PointsService) {}
+  constructor(private points: PointsService, private settings: SettingsService) {}
 
   @Get('rules')
   rules() {
@@ -41,7 +42,7 @@ export class PointsController {
   @Get('referral')
   referral(@Req() req: any) {
     const proto = (req.headers['x-forwarded-proto'] as string)?.split(',')[0] || req.protocol;
-    const base = process.env.PUBLIC_WEB_URL?.replace(/\/+$/, '') || `${proto}://${req.get('host')}`;
+    const base = this.settings.get('PUBLIC_WEB_URL').replace(/\/+$/, '') || `${proto}://${req.get('host')}`;
     return this.points.referral(req.user.sub, base);
   }
 }

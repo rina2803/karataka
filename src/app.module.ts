@@ -23,6 +23,7 @@ import { NotificationsModule } from './notifications/notifications.module';
 import { JobsModule } from './jobs/jobs.module';
 import { ArenaModule } from './arena/arena.module';
 import { AiModule } from './ai/ai.module';
+import { SettingsModule } from './settings/settings.module';
 import { SocialModule } from './social/social.module';
 
 @Module({
@@ -41,6 +42,7 @@ import { SocialModule } from './social/social.module';
     SellerModule,
     JobsModule,
     ArenaModule,
+    SettingsModule,
     AiModule,
     SocialModule,
     CartModule,

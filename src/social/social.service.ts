@@ -2,6 +2,7 @@ import { BadRequestException, ForbiddenException, Injectable, Logger, NotFoundEx
 import * as jwt from 'jsonwebtoken';
 import { NotificationsService } from '../notifications/notifications.service';
 import { PrismaService } from '../prisma/prisma.service';
+import { SettingsService } from '../settings/settings.service';
 
 /// Pages Facebook des vendeurs : connexion via Facebook Login (OAuth), puis
 /// publication d'un produit sur la page du vendeur APRÈS validation admin.
@@ -18,14 +19,18 @@ export class SocialService {
   /// Pages proposées après connexion, le temps que le vendeur choisisse.
   private pendingPages = new Map<string, { userId: string; pages: { id: string; name: string; access_token: string }[]; until: number }>();
 
-  constructor(private prisma: PrismaService, private notifications: NotificationsService) {}
+  constructor(
+    private prisma: PrismaService,
+    private notifications: NotificationsService,
+    private settings: SettingsService,
+  ) {}
 
   private get graph() {
     return `https://graph.facebook.com/${process.env.FB_GRAPH_VERSION || 'v21.0'}`;
   }
 
   get facebookEnabled() {
-    return !!(process.env.FB_APP_ID && process.env.FB_APP_SECRET);
+    return !!(this.settings.get('FB_APP_ID') && this.settings.get('FB_APP_SECRET'));
   }
 
   private secret() {
@@ -46,7 +51,7 @@ export class SocialService {
     if (!this.facebookEnabled) throw new ServiceUnavailableException("La connexion Facebook n'est pas encore activée par Karataka");
     const state = jwt.sign({ sub: userId, kind: 'fb-connect' }, this.secret(), { expiresIn: '15m' });
     const params = new URLSearchParams({
-      client_id: process.env.FB_APP_ID!,
+      client_id: this.settings.get('FB_APP_ID'),
       redirect_uri: `${apiBase}/social/facebook/callback`,
       state,
       scope: SCOPES,
@@ -67,15 +72,15 @@ export class SocialService {
     }
     try {
       const short = await this.fbGet('oauth/access_token', {
-        client_id: process.env.FB_APP_ID!,
-        client_secret: process.env.FB_APP_SECRET!,
+        client_id: this.settings.get('FB_APP_ID'),
+        client_secret: this.settings.get('FB_APP_SECRET'),
         redirect_uri: `${apiBase}/social/facebook/callback`,
         code,
       });
       const long = await this.fbGet('oauth/access_token', {
         grant_type: 'fb_exchange_token',
-        client_id: process.env.FB_APP_ID!,
-        client_secret: process.env.FB_APP_SECRET!,
+        client_id: this.settings.get('FB_APP_ID'),
+        client_secret: this.settings.get('FB_APP_SECRET'),
         fb_exchange_token: short.access_token,
       });
       const accounts = await this.fbGet('me/accounts', { fields: 'id,name,access_token', access_token: long.access_token });
