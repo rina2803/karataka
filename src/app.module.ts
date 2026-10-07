@@ -22,6 +22,8 @@ import { ShareModule } from './share/share.module';
 import { NotificationsModule } from './notifications/notifications.module';
 import { JobsModule } from './jobs/jobs.module';
 import { ArenaModule } from './arena/arena.module';
+import { AiModule } from './ai/ai.module';
+import { SocialModule } from './social/social.module';
 
 @Module({
   imports: [
@@ -39,6 +41,8 @@ import { ArenaModule } from './arena/arena.module';
     SellerModule,
     JobsModule,
     ArenaModule,
+    AiModule,
+    SocialModule,
     CartModule,
     HomeModule,
     AppReleaseModule,

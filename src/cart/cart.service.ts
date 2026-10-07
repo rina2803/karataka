@@ -307,6 +307,7 @@ export class CartService {
     });
     // Points d'achat seulement une fois la livraison confirmée par l'admin.
     const earned = await this.points.award(order.userId, 'purchase', `cart:${id}`);
+    await this.points.rewardReferral(order.userId);
     await this.notifications.notifyUser(order.userId, {
       type: 'order',
       title: 'Commande livrée 📦',

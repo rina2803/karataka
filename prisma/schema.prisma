@@ -42,6 +42,9 @@ model User {
   isPartner          Boolean                 @default(false)
   /// Courte présentation du magasin partenaire, saisie par l'admin.
   partnerDescription String?
+  /// Code de parrainage personnel, et parrain éventuel (bonus de points).
+  referralCode       String?                 @unique
+  referredById       String?
   notifications      Notification[]
   devices            DeviceToken[]
 }
@@ -451,4 +454,49 @@ model JobOffer {
   createdAt   DateTime @default(now())
 
   @@index([active, createdAt])
+}
+
+/// Page Facebook (ou compte TikTok) reliée au compte vendeur. Le jeton de
+/// page reste côté serveur et n'est jamais renvoyé à l'app.
+model SocialAccount {
+  id          String   @id @default(cuid())
+  userId      String
+  platform    String
+  pageId      String
+  pageName    String
+  accessToken String
+  createdAt   DateTime @default(now())
+
+  @@unique([userId, platform])
+}
+
+/// Publication demandée par un vendeur sur sa page, publiée seulement après
+/// validation par un admin. pending | published | failed | rejected
+model SocialPost {
+  id         String    @id @default(cuid())
+  sellerId   String
+  productId  String
+  platform   String
+  message    String
+  status     String    @default("pending")
+  externalId String?
+  error      String?
+  reviewNote String?
+  createdAt  DateTime  @default(now())
+  reviewedAt DateTime?
+
+  @@index([status, createdAt])
+  @@index([sellerId, createdAt])
+}
+
+/// Bonus quotidien (roue) : un tirage par jour et par compte.
+model DailySpin {
+  id        String   @id @default(cuid())
+  userId    String
+  day       String
+  prize     Int
+  streak    Int      @default(1)
+  createdAt DateTime @default(now())
+
+  @@unique([userId, day])
 }

@@ -7,7 +7,7 @@ export class AuthController {
   constructor(private auth: AuthService, private users: UsersService) {}
 
   @Post('register')
-  async register(@Body() body: { username: string; email: string; phone: string; password: string }) {
+  async register(@Body() body: { username: string; email: string; phone: string; password: string; referralCode?: string }) {
     const username = body.username?.trim() ?? '';
     const email = body.email?.trim().toLowerCase() ?? '';
     const phone = (body.phone ?? '').replace(/\s+/g, '');
@@ -25,7 +25,7 @@ export class AuthController {
       throw new HttpException(`${label} est déjà utilisé.`, HttpStatus.CONFLICT);
     }
 
-    const user = await this.auth.register({ username, email, phone, password });
+    const user = await this.auth.register({ username, email, phone, password, referralCode: body.referralCode });
     const token = this.auth.signToken(user.id);
     return { ok: true, token, user: this.users.toPublic(user as any) };
   }

@@ -29,3 +29,16 @@ services:
         value: admin
       - key: ADMIN_PASSWORD
         sync: false
+      # IA Google Gemini (descriptions, photos produit, assistant). Sans clé,
+      # les fonctions IA affichent « pas encore activée ».
+      - key: GEMINI_API_KEY
+        sync: false
+      # Application Meta pour relier les pages Facebook des vendeurs.
+      # URL de redirection à déclarer chez Meta : <URL du service>/social/facebook/callback
+      - key: FB_APP_ID
+        sync: false
+      - key: FB_APP_SECRET
+        sync: false
+      # Domaine public des liens partagés (facultatif, ex. https://karataka.mg).
+      - key: PUBLIC_WEB_URL
+        sync: false

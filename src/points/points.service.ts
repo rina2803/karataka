@@ -12,6 +12,9 @@ export const POINT_RULES = {
   purchase: { amount: 100, label: 'Achat effectué', dailyCap: 5 },
   tournament_join: { amount: 20, label: 'Inscription à un tournoi', dailyCap: 3 },
   share_product: { amount: 5, label: 'Produit partagé', dailyCap: 3 },
+  daily_spin: { amount: 0, label: 'Roue du jour', dailyCap: 1 },
+  referral_referrer: { amount: 100, label: 'Parrainage : votre filleul a fait son 1er achat', dailyCap: 10 },
+  referral_welcome: { amount: 50, label: 'Bienvenue : bonus de parrainage', dailyCap: 1 },
 } as const;
 
 export type PointReason = keyof typeof POINT_RULES;
@@ -40,8 +43,10 @@ export class PointsService {
    * limite du plafond journalier. Ne lève jamais : un échec d'attribution ne
    * doit pas casser l'action principale (achat, partie…).
    */
-  async award(userId: string, reason: PointReason, refKey: string): Promise<number> {
-    const rule = POINT_RULES[reason];
+  async award(userId: string, reason: PointReason, refKey: string, amountOverride?: number): Promise<number> {
+    const base = POINT_RULES[reason];
+    const rule = { ...base, amount: amountOverride ?? base.amount };
+    if (rule.amount <= 0) return 0;
     try {
       const today = await this.prisma.pointTransaction.count({
         where: { userId, reason, createdAt: { gte: startOfMadagascarDay() } },
@@ -106,6 +111,100 @@ export class PointsService {
     }
   }
 
+  // ——— Roue du jour ———
+
+  /// Cases de la roue (points) et leur poids de tirage.
+  static readonly SPIN_PRIZES = [5, 10, 15, 20, 30, 50, 100, 200];
+  private static readonly SPIN_WEIGHTS = [30, 25, 15, 12, 8, 6, 3, 1];
+
+  private dayKey(date = new Date()) {
+    return startOfMadagascarDay(date).toISOString().slice(0, 10);
+  }
+
+  async spinStatus(userId: string) {
+    const today = this.dayKey();
+    const last = await this.prisma.dailySpin.findFirst({ where: { userId }, orderBy: { createdAt: 'desc' } });
+    const yesterday = this.dayKey(new Date(Date.now() - 24 * 3600_000));
+    const streak = !last ? 0 : last.day === today || last.day === yesterday ? last.streak : 0;
+    return {
+      prizes: PointsService.SPIN_PRIZES,
+      spunToday: last?.day === today,
+      lastPrize: last?.day === today ? last.prize : null,
+      streak,
+      nextDayBonus: Math.min(30, 5 * (last?.day === today ? streak : streak + 1)),
+    };
+  }
+
+  /// Un tirage par jour ; une série de jours consécutifs ajoute un bonus
+  /// (+5 par jour, jusqu'à +30).
+  async spin(userId: string) {
+    const status = await this.spinStatus(userId);
+    if (status.spunToday) return { ...status, error: "Vous avez déjà tourné la roue aujourd'hui, revenez demain !" };
+    const total = PointsService.SPIN_WEIGHTS.reduce((a, b) => a + b, 0);
+    let roll = Math.random() * total;
+    let index = 0;
+    while (roll >= PointsService.SPIN_WEIGHTS[index]) roll -= PointsService.SPIN_WEIGHTS[index++];
+    const prize = PointsService.SPIN_PRIZES[index];
+    const streak = status.streak + 1;
+    const bonus = Math.min(30, 5 * streak);
+    const day = this.dayKey();
+    try {
+      await this.prisma.dailySpin.create({ data: { userId, day, prize: prize + bonus, streak } });
+    } catch {
+      return { ...status, spunToday: true, error: "Vous avez déjà tourné la roue aujourd'hui" };
+    }
+    const earned = await this.award(userId, 'daily_spin', `${userId}:${day}`, prize + bonus);
+    return { prizes: PointsService.SPIN_PRIZES, index, prize, bonus, streak, earned, spunToday: true };
+  }
+
+  // ——— Parrainage ———
+
+  async referral(userId: string, publicBase: string) {
+    let user = await this.prisma.user.findUnique({ where: { id: userId }, select: { referralCode: true, username: true } });
+    if (!user) return null;
+    if (!user.referralCode) {
+      const base = user.username.replace(/[^a-zA-Z0-9]/g, '').slice(0, 6).toUpperCase() || 'KARA';
+      for (let i = 0; i < 5 && !user.referralCode; i++) {
+        const code = `${base}${Math.floor(100 + Math.random() * 900)}`;
+        try {
+          user = await this.prisma.user.update({ where: { id: userId }, data: { referralCode: code }, select: { referralCode: true, username: true } });
+        } catch {
+          /* code déjà pris : on retente */
+        }
+      }
+    }
+    const [invited, earned] = await Promise.all([
+      this.prisma.user.count({ where: { referredById: userId } }),
+      this.prisma.pointTransaction.aggregate({ where: { userId, reason: 'referral_referrer' }, _sum: { amount: true } }),
+    ]);
+    return {
+      code: user.referralCode,
+      link: `${publicBase}/download`,
+      invited,
+      earned: earned._sum.amount ?? 0,
+      rewardReferrer: POINT_RULES.referral_referrer.amount,
+      rewardWelcome: POINT_RULES.referral_welcome.amount,
+    };
+  }
+
+  /// Enregistre le parrain à l'inscription (code saisi par le filleul).
+  async attachReferrer(userId: string, code?: string) {
+    const clean = (code ?? '').trim().toUpperCase();
+    if (!clean) return;
+    const referrer = await this.prisma.user.findUnique({ where: { referralCode: clean }, select: { id: true } });
+    if (!referrer || referrer.id === userId) return;
+    await this.prisma.user.update({ where: { id: userId }, data: { referredById: referrer.id } });
+  }
+
+  /// Premier achat livré d'un filleul : bonus pour lui et pour son parrain
+  /// (une seule fois — la clé de référence l'empêche de se répéter).
+  async rewardReferral(userId: string) {
+    const user = await this.prisma.user.findUnique({ where: { id: userId }, select: { referredById: true } });
+    if (!user?.referredById) return;
+    const welcome = await this.award(userId, 'referral_welcome', userId);
+    if (welcome > 0) await this.award(user.referredById, 'referral_referrer', userId);
+  }
+
   async summary(userId: string) {
     const user = await this.prisma.user.findUnique({ where: { id: userId }, select: { points: true } });
     return { points: user?.points ?? 0 };
@@ -126,6 +225,8 @@ export class PointsService {
   }
 
   rules() {
-    return Object.entries(POINT_RULES).map(([reason, r]) => ({ reason, ...r }));
+    return Object.entries(POINT_RULES)
+      .filter(([, r]) => r.amount > 0)
+      .map(([reason, r]) => ({ reason, ...r }));
   }
 }

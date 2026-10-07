@@ -26,14 +26,20 @@ export class AuthService {
     return true;
   }
 
-  async register(data: { username: string; email: string; phone: string; password: string }) {
+  async register(data: { username: string; email: string; phone: string; password: string; referralCode?: string }) {
     const hashed = await bcrypt.hash(data.password, 10);
+    // Code de parrainage facultatif : un code inconnu est simplement ignoré.
+    const code = data.referralCode?.trim().toUpperCase();
+    const referrer = code
+      ? await this.prisma.user.findUnique({ where: { referralCode: code }, select: { id: true } })
+      : null;
     const user = await this.prisma.user.create({
       data: {
         username: data.username,
         email: data.email,
         phone: data.phone,
         password: hashed,
+        referredById: referrer?.id ?? null,
         wallet: { create: { balance: 0 } },
       },
     });
