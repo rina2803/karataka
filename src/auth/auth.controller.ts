@@ -1,13 +1,16 @@
-import { Controller, Post, Body, HttpException, HttpStatus } from '@nestjs/common';
+import { Controller, Post, Body, HttpException, HttpStatus, Req } from '@nestjs/common';
+import type { Request } from 'express';
+import { ActivityService } from '../activity/activity.service';
+import { clientIp, deviceLabel } from '../activity/activity.interceptor';
 import { AuthService } from './auth.service';
 import { UsersService } from '../users/users.service';
 
 @Controller('auth')
 export class AuthController {
-  constructor(private auth: AuthService, private users: UsersService) {}
+  constructor(private auth: AuthService, private users: UsersService, private activity: ActivityService) {}
 
   @Post('register')
-  async register(@Body() body: { username: string; email: string; phone: string; password: string; referralCode?: string }) {
+  async register(@Body() body: { username: string; email: string; phone: string; password: string; referralCode?: string }, @Req() req: Request) {
     const username = body.username?.trim() ?? '';
     const email = body.email?.trim().toLowerCase() ?? '';
     const phone = (body.phone ?? '').replace(/\s+/g, '');
@@ -27,6 +30,7 @@ export class AuthController {
 
     const user = await this.auth.register({ username, email, phone, password, referralCode: body.referralCode });
     const token = this.auth.signToken(user.id);
+    this.activity.record({ userId: user.id, action: 'register', label: 'Inscription', ip: clientIp(req), device: deviceLabel(req) });
     return { ok: true, token, user: this.users.toPublic(user as any) };
   }
 
@@ -37,10 +41,14 @@ export class AuthController {
   }
 
   @Post('login')
-  async login(@Body() body: { email: string; password: string }) {
+  async login(@Body() body: { email: string; password: string }, @Req() req: Request) {
     const user = await this.auth.validateUser(body.email, body.password);
-    if (!user) throw new HttpException('Invalid credentials', HttpStatus.UNAUTHORIZED);
+    if (!user) {
+      this.activity.record({ action: 'login_failed', label: `Connexion refusée (${String(body.email ?? '').slice(0, 60)})`, ip: clientIp(req), device: deviceLabel(req) });
+      throw new HttpException('Invalid credentials', HttpStatus.UNAUTHORIZED);
+    }
     const token = this.auth.signToken((user as any).id);
+    this.activity.record({ userId: (user as any).id, action: 'login', label: 'Connexion', ip: clientIp(req), device: deviceLabel(req) });
     return { token, user: this.users.toPublic(user as any) };
   }
 }

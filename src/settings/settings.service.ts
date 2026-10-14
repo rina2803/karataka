@@ -1,9 +1,10 @@
-import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
+import { BadRequestException, Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 
 /// Réglages que l'admin peut changer depuis l'app. Les valeurs secrètes ne
 /// sont jamais renvoyées en clair (seulement leurs 4 derniers caractères).
 export const SETTING_DEFS = [
+  { key: 'DELIVERY_FEE', label: 'Frais de livraison (Ar par vendeur)', secret: false, help: 'Appliqué aux nouvelles commandes. Vide = 6000 Ar.' },
   { key: 'GEMINI_API_KEY', label: 'Clé API Google Gemini', secret: true, help: 'aistudio.google.com → Get API key' },
   { key: 'GEMINI_TEXT_MODEL', label: 'Modèle Gemini (texte)', secret: false, help: 'Par défaut : gemini-2.5-flash' },
   { key: 'GEMINI_IMAGE_MODEL', label: 'Modèle Gemini (images)', secret: false, help: 'Par défaut : gemini-2.5-flash-image' },
@@ -11,6 +12,8 @@ export const SETTING_DEFS = [
   { key: 'FB_APP_SECRET', label: 'Facebook : clé secrète de l’application', secret: true, help: 'developers.facebook.com → Paramètres → Général' },
   { key: 'PUBLIC_WEB_URL', label: 'Adresse publique des liens partagés', secret: false, help: 'Vide = adresse du serveur. Ex. : https://karataka.mg' },
 ] as const;
+
+export const DEFAULT_DELIVERY_FEE = 6000;
 
 export type SettingKey = (typeof SETTING_DEFS)[number]['key'];
 
@@ -55,9 +58,21 @@ export class SettingsService implements OnModuleInit {
     });
   }
 
+  /// Frais de livraison par vendeur distinct du panier.
+  deliveryFee(): number {
+    const raw = this.get('DELIVERY_FEE');
+    const fee = Number(raw);
+    return raw && Number.isFinite(fee) && fee >= 0 ? Math.round(fee) : DEFAULT_DELIVERY_FEE;
+  }
+
   async set(key: string, value: string) {
     if (!SETTING_DEFS.some((d) => d.key === key)) return false;
-    const clean = value.trim();
+    let clean = value.trim();
+    if (key === 'DELIVERY_FEE' && clean) {
+      const fee = Number(clean.replace(/\s|ar$/gi, ''));
+      if (!Number.isFinite(fee) || fee < 0 || fee > 1_000_000) throw new BadRequestException('Frais de livraison invalides');
+      clean = String(Math.round(fee));
+    }
     if (clean) {
       await this.prisma.appSetting.upsert({ where: { key }, create: { key, value: clean }, update: { value: clean } });
     } else {

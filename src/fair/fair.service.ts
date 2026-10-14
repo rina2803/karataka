@@ -1,8 +1,7 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { SettingsService } from '../settings/settings.service';
 
-const TANA_DELIVERY_FEE = 6000;
-const OTHER_DELIVERY_FEE = 12000;
 
 function isTana(city: string) {
   const c = city.trim().toLowerCase();
@@ -11,7 +10,7 @@ function isTana(city: string) {
 
 @Injectable()
 export class FairService {
-  constructor(private prisma: PrismaService) {}
+  constructor(private prisma: PrismaService, private settings: SettingsService) {}
 
   listEvents(category?: string) {
     return this.prisma.fairEvent.findMany({
@@ -72,7 +71,9 @@ export class FairService {
         lines.push({ eventId: event.id, title: event.title, quantity, unitPrice });
       }
 
-      const deliveryFee = isTana(body.deliveryCity) ? TANA_DELIVERY_FEE : OTHER_DELIVERY_FEE;
+      // Tana : frais réglés par l'admin ; ailleurs, le double.
+      const baseFee = this.settings.deliveryFee();
+      const deliveryFee = isTana(body.deliveryCity) ? baseFee : baseFee * 2;
 
       return {
         ok: true,

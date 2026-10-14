@@ -1,0 +1,192 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <!--
+    If you are serving your web app in a path other than the root, change the
+    href value below to reflect the base path you are serving from.
+
+    The path provided below has to start and end with a slash "/" in order for
+    it to work correctly.
+
+    For more details:
+    * https://developer.mozilla.org/en-US/docs/Web/HTML/Element/base
+
+    This is a placeholder for base href that will be replaced by the value of
+    the `--base-href` argument provided to `flutter build`.
+  -->
+  <base href="/app/">
+
+  <meta charset="UTF-8">
+  <meta content="IE=Edge" http-equiv="X-UA-Compatible">
+  <!-- iPhone : pleine largeur, pas de zoom au double-tap, zone sûre gérée par #app. -->
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+  <meta name="description" content="Karataka — jeux et boutique multi-vendeurs.">
+  <meta name="theme-color" content="#0058BC">
+
+  <!-- iOS meta tags & icons -->
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="apple-mobile-web-app-title" content="Karataka">
+  <link rel="apple-touch-icon" sizes="180x180" href="icons/apple-touch-icon.png">
+
+  <!-- Favicon -->
+  <link rel="icon" type="image/png" href="favicon.png"/>
+
+  <title>Karataka</title>
+  <link rel="manifest" href="manifest.json">
+
+  <style>
+    html, body {
+      height: 100%;
+      margin: 0;
+      background: #F7F9FC;
+      overscroll-behavior: none;
+    }
+    /* L'app reste hors de l'encoche et de la barre d'accueil de l'iPhone. */
+    #app {
+      position: fixed;
+      top: env(safe-area-inset-top, 0px);
+      bottom: env(safe-area-inset-bottom, 0px);
+      left: env(safe-area-inset-left, 0px);
+      right: env(safe-area-inset-right, 0px);
+    }
+    /* Bandeau « Installer sur l'iPhone » (Safari, hors écran d'accueil). */
+    #ios-install {
+      position: fixed;
+      left: 12px;
+      right: 12px;
+      bottom: calc(12px + env(safe-area-inset-bottom, 0px));
+      z-index: 10000;
+      display: none;
+      gap: 12px;
+      align-items: center;
+      padding: 12px 14px;
+      border-radius: 16px;
+      background: #102450;
+      color: #fff;
+      font: 14px/1.35 -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial, sans-serif;
+      box-shadow: 0 10px 30px rgba(16, 36, 80, 0.35);
+    }
+    #ios-install img { width: 44px; height: 44px; border-radius: 10px; flex: none; }
+    #ios-install b { display: block; font-size: 15px; }
+    #ios-install .share {
+      display: inline-block;
+      width: 15px;
+      height: 15px;
+      vertical-align: -2px;
+    }
+    #ios-install button {
+      flex: none;
+      border: 0;
+      background: transparent;
+      color: #ADC6FF;
+      font-size: 22px;
+      padding: 4px 6px;
+    }
+    /* Préchargeur affiché avant même que le moteur Flutter ne soit prêt —
+       reprend exactement le thème de l'app (bleu ciel / blanc / gris) pour
+       qu'il n'y ait jamais de page blanche au démarrage. */
+    #app-loader {
+      position: fixed;
+      inset: 0;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      background: #F7F9FC;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial, sans-serif;
+      z-index: 9999;
+      transition: opacity 0.4s ease;
+    }
+    #app-loader .mark {
+      width: 76px;
+      height: 76px;
+      border-radius: 24px;
+      background: #0058BC;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 40px;
+      color: #ffffff;
+      box-shadow: 0 12px 28px rgba(46, 155, 234, 0.32);
+      animation: al-pulse 1.6s ease-in-out infinite;
+    }
+    #app-loader .name {
+      margin-top: 20px;
+      font-weight: 800;
+      font-size: 20px;
+      color: #16283A;
+      letter-spacing: 0.2px;
+    }
+    #app-loader .sub {
+      margin-top: 4px;
+      font-size: 12px;
+      color: #5C6B7A;
+    }
+    #app-loader .spinner {
+      margin-top: 24px;
+      width: 26px;
+      height: 26px;
+      border-radius: 50%;
+      border: 3px solid #DCE7F1;
+      border-top-color: #0058BC;
+      animation: al-spin 0.9s linear infinite;
+    }
+    @keyframes al-pulse {
+      0%, 100% { transform: scale(1); }
+      50% { transform: scale(1.06); }
+    }
+    @keyframes al-spin {
+      to { transform: rotate(360deg); }
+    }
+    #app-loader.hidden {
+      opacity: 0;
+      pointer-events: none;
+    }
+  </style>
+</head>
+<body>
+  <div id="app-loader">
+    <div class="mark">♟</div>
+    <div class="name">Karataka</div>
+    <!-- <div class="sub">Jouez, défiez, gagnez.</div> -->
+    <div class="spinner"></div>
+  </div>
+  <div id="app"></div>
+  <div id="ios-install" role="dialog" aria-label="Installer Karataka">
+    <img src="icons/apple-touch-icon.png" alt="">
+    <div style="flex:1">
+      <b>Installer Karataka sur l'iPhone</b>
+      Touchez
+      <svg class="share" viewBox="0 0 24 24" fill="none" stroke="#ADC6FF" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12M7 8l5-5 5 5M5 12v8h14v-8"/></svg>
+      Partager, puis « Sur l'écran d'accueil ».
+    </div>
+    <button type="button" aria-label="Fermer">×</button>
+  </div>
+  <script>
+    // Bandeau d'installation : Safari iPhone/iPad, pas encore installé.
+    (function () {
+      var ua = navigator.userAgent;
+      var ios = /iPhone|iPad|iPod/.test(ua) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+      var installed = window.navigator.standalone === true || window.matchMedia('(display-mode: standalone)').matches;
+      var dismissed = false;
+      try { dismissed = localStorage.getItem('ios-install-dismissed') === '1'; } catch (e) {}
+      if (!ios || installed || dismissed) return;
+      var banner = document.getElementById('ios-install');
+      banner.style.display = 'flex';
+      banner.querySelector('button').addEventListener('click', function () {
+        banner.style.display = 'none';
+        try { localStorage.setItem('ios-install-dismissed', '1'); } catch (e) {}
+      });
+    })();
+    window.addEventListener('flutter-first-frame', function () {
+      var loader = document.getElementById('app-loader');
+      if (!loader) return;
+      loader.classList.add('hidden');
+      setTimeout(function () { loader.remove(); }, 450);
+    });
+  </script>
+  <script src="flutter_bootstrap.js" async></script>
+</body>
+</html>

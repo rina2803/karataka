@@ -31,13 +31,20 @@ export class MarketplaceController {
   }
 
   /// Photo envoyée par le vendeur depuis son téléphone.
+  /// L'adresse change (?v=…) à chaque nouvelle photo : le téléphone peut la
+  /// garder un an. Côté serveur, les photos décodées restent en mémoire.
   @Get('products/:id/image')
-  async image(@Param('id') id: string, @Res() res: Response) {
-    const photo = await this.marketplace.productPhoto(id);
+  async image(@Param('id') id: string, @Req() req: any, @Res() res: Response) {
+    const photo = await this.marketplace.productPhotoCached(id);
     if (!photo) throw new NotFoundException('Photo introuvable');
     res.setHeader('Content-Type', photo.mimeType);
-    res.setHeader('Cache-Control', 'public, max-age=86400');
-    res.send(Buffer.from(photo.data, 'base64'));
+    res.setHeader('ETag', photo.etag);
+    res.setHeader('Cache-Control', req.query?.v ? 'public, max-age=31536000, immutable' : 'public, max-age=86400');
+    if (req.headers['if-none-match'] === photo.etag) {
+      res.status(304).end();
+      return;
+    }
+    res.send(photo.bytes);
   }
 
   @Get('categories')

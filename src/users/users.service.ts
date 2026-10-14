@@ -78,6 +78,7 @@ export class UsersService {
 
   async list(limit = 50) {
     const users = await this.prisma.user.findMany({
+      where: { deletedAt: null },
       take: limit,
       select: publicUserSelect,
       orderBy: { createdAt: 'desc' },

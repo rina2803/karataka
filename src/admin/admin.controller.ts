@@ -98,25 +98,6 @@ export class AdminController {
     return { ok: true };
   }
 
-  @Get('users')
-  async listUsers() {
-    const users = await this.prisma.user.findMany({
-      orderBy: { createdAt: 'desc' },
-      take: 200,
-      select: {
-        id: true,
-        username: true,
-        email: true,
-        displayName: true,
-        avatarColor: true,
-        role: true,
-        createdAt: true,
-        wallet: { select: { balance: true } },
-      },
-    });
-    return users.map((u) => ({ ...u, balance: u.wallet?.balance ?? '0' }));
-  }
-
   @Get('products')
   products() {
     return this.prisma.product.findMany({ orderBy: { createdAt: 'desc' } });

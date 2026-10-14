@@ -1,6 +1,9 @@
 import 'dotenv/config';
 import { NestFactory } from '@nestjs/core';
-import { json, urlencoded } from 'express';
+import * as compression from 'compression';
+import { json, static as serveStatic, urlencoded } from 'express';
+import { existsSync } from 'fs';
+import { join } from 'path';
 import { AppModule } from './app.module';
 import { PrismaService } from './prisma/prisma.service';
 import * as bcrypt from 'bcryptjs';
@@ -141,12 +144,40 @@ function parseAllowedOrigins(): string[] {
     .map((value) => value.replace(/\/+$/, ''));
 }
 
+/// Le serveur gratuit Render s'endort après 15 min sans visite : le premier
+/// client attend alors près d'une minute. Un petit appel toutes les 10 min
+/// le garde éveillé (RENDER_EXTERNAL_URL est fourni par Render ;
+/// KEEP_AWAKE=0 pour désactiver).
+function keepAwake() {
+  const base = (process.env.KEEP_AWAKE_URL || process.env.RENDER_EXTERNAL_URL || '').replace(/\/+$/, '');
+  if (!base || process.env.KEEP_AWAKE === '0') return;
+  setInterval(() => {
+    fetch(`${base}/health`).catch(() => undefined);
+  }, 10 * 60_000).unref();
+  console.log(`Maintien en éveil : ${base}/health toutes les 10 min`);
+}
+
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
+  // Réponses JSON compressées (gzip) : une page de produits passe d'environ
+  // 40 Ko à moins de 10 Ko, beaucoup plus rapide sur réseau mobile.
+  app.use(compression());
   // Photos envoyées en base64 (CIN, selfie, produits) : la limite par défaut
   // de 100 Ko les refusait toutes.
   app.use(json({ limit: '12mb' }));
   app.use(urlencoded({ extended: true, limit: '12mb' }));
+
+  // Version web de l'app (iPhone via Safari, « Sur l'écran d'accueil »).
+  // no-cache : chaque fichier est revalidé (ETag), l'iPhone a toujours la
+  // dernière version sans rien réinstaller.
+  const webApp = join(__dirname, '..', 'public', 'app');
+  if (existsSync(webApp)) {
+    app.use('/app', (req, res, next) => {
+      if (req.originalUrl === '/app') return res.redirect(301, '/app/');
+      next();
+    });
+    app.use('/app', serveStatic(webApp, { setHeaders: (res) => res.setHeader('Cache-Control', 'no-cache') }));
+  }
 
   const allowedOrigins = parseAllowedOrigins();
   app.enableCors({
@@ -179,6 +210,8 @@ async function bootstrap() {
   console.log(`API running on port ${port}`);
   console.log(`CORS origin(s): ${allowedOrigins.join(', ') || '*'}`);
   console.log(`Node env: ${process.env.NODE_ENV || 'development'}`);
+
+  keepAwake();
 
   try {
     const prisma = app.get(PrismaService);

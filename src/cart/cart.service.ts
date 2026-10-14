@@ -3,13 +3,11 @@ import { formatAr } from '../common/format';
 import { NotificationsService } from '../notifications/notifications.service';
 import { PointsService } from '../points/points.service';
 import { PrismaService } from '../prisma/prisma.service';
+import { SettingsService } from '../settings/settings.service';
 
 /// Mêmes règles de commission que la boutique instantanée (marketplace.service.ts).
 const MARKETPLACE_COMMISSION_RATE = 0.05;
 
-/// Frais de livraison : 6 000 Ar par fournisseur distinct dans le panier.
-/// Le serveur recalcule toujours ce montant à partir des produits reçus.
-const DELIVERY_FEE_PER_SUPPLIER = 6000;
 
 const PAYMENT_LABEL: Record<string, string> = { mvola: 'MVola', wallet: 'portefeuille', cash: 'à la livraison' };
 
@@ -46,6 +44,7 @@ export class CartService {
     private prisma: PrismaService,
     private points: PointsService,
     private notifications: NotificationsService,
+    private settings: SettingsService,
   ) {}
 
   async checkout(userId: string, body: CheckoutBody) {
@@ -76,6 +75,9 @@ export class CartService {
       }
     }
 
+    // Frais par fournisseur distinct, réglés par l'admin (Paramètres) ; le
+    // serveur recalcule toujours ce montant à partir des produits reçus.
+    const feePerSupplier = this.settings.deliveryFee();
     const order = await this.prisma.$transaction(async (tx) => {
       let itemsTotal = 0;
       let peerTotal = 0;
@@ -103,7 +105,7 @@ export class CartService {
         lineData.push({ productId: product.id, quantity, unitPrice: String(unitPrice), sellerId: product.sellerId });
       }
 
-      const deliveryFee = supplierKeys.size * DELIVERY_FEE_PER_SUPPLIER;
+      const deliveryFee = supplierKeys.size * feePerSupplier;
       const commissionAmount = Math.round(peerTotal * MARKETPLACE_COMMISSION_RATE);
 
       if (paymentMethod === 'wallet') {
@@ -324,6 +326,78 @@ export class CartService {
       data: { orderId: id, screen: 'wallet' },
     });
     return result;
+  }
+
+  /// Correction par l'admin du total des achats et/ou des frais de livraison
+  /// d'une commande. Payée par portefeuille : la différence est remboursée
+  /// ou débitée (si le solde le permet) pour que le client paie le bon montant.
+  async adminUpdateAmounts(id: string, body: { itemsTotal?: number | string; deliveryFee?: number | string; note?: string }) {
+    const order = await this.prisma.cartOrder.findUnique({ where: { id } });
+    if (!order) throw new NotFoundException('Commande introuvable');
+    if (order.status === 'rejected') throw new BadRequestException('Cette commande est refusée');
+
+    const parse = (value: number | string | undefined, current: unknown, label: string) => {
+      if (value === undefined || value === null || value === '') return Number(current);
+      const n = Number(String(value).replace(/\s/g, ''));
+      if (!Number.isFinite(n) || n < 0 || n > 100_000_000) throw new BadRequestException(`${label} invalide`);
+      return Math.round(n);
+    };
+    const itemsTotal = parse(body.itemsTotal, order.itemsTotal, 'Total des achats');
+    const deliveryFee = parse(body.deliveryFee, order.deliveryFee, 'Frais de livraison');
+    const before = Number(order.itemsTotal) + Number(order.deliveryFee);
+    const after = itemsTotal + deliveryFee;
+    const diff = after - before;
+    const note = body.note?.trim().slice(0, 300) || null;
+
+    await this.prisma.$transaction(async (tx) => {
+      if (order.paymentMethod === 'wallet' && diff !== 0) {
+        const wallet = await tx.wallet.findUnique({ where: { userId: order.userId } });
+        if (!wallet) throw new BadRequestException('Portefeuille du client introuvable');
+        if (diff > 0) {
+          const charged = await tx.wallet.updateMany({
+            where: { id: wallet.id, balance: { gte: diff } },
+            data: { balance: { decrement: diff } },
+          });
+          if (charged.count !== 1) {
+            throw new BadRequestException(`Solde du client insuffisant pour débiter ${formatAr(diff)} de plus`);
+          }
+        } else {
+          await tx.wallet.update({ where: { id: wallet.id }, data: { balance: { increment: -diff } } });
+        }
+        await tx.transaction.create({
+          data: { walletId: wallet.id, amount: String(-diff), type: 'cart_adjust', meta: JSON.stringify({ orderId: id }) },
+        });
+      }
+      await tx.cartOrder.update({
+        where: { id },
+        data: { itemsTotal: String(itemsTotal), deliveryFee: String(deliveryFee), ...(note ? { reviewNote: note } : {}) },
+      });
+    });
+
+    if (diff !== 0) {
+      const walletLine =
+        order.paymentMethod !== 'wallet'
+          ? ''
+          : diff > 0
+            ? ` ${formatAr(diff)} débités de votre portefeuille.`
+            : ` ${formatAr(-diff)} remboursés sur votre portefeuille.`;
+      await this.notifications.notifyUser(order.userId, {
+        type: 'order',
+        title: 'Montant de votre commande mis à jour',
+        body:
+          `Nouveau total : ${formatAr(after)} (achats ${formatAr(itemsTotal)} + livraison ${formatAr(deliveryFee)}).` +
+          walletLine +
+          (note ? ` Motif : ${note.slice(0, 120)}` : ''),
+        data: { orderId: id, screen: 'orders' },
+      });
+    }
+    return this.prisma.cartOrder.findUnique({
+      where: { id },
+      include: {
+        user: { select: { id: true, username: true, displayName: true, avatarColor: true } },
+        items: { include: { product: { select: { name: true, imageUrl: true } } } },
+      },
+    });
   }
 
   async reject(id: string, reviewNote?: string) {

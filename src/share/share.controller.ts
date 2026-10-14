@@ -56,7 +56,7 @@ export class ShareController {
   @Get('app/config')
   async config(@Req() req: Request) {
     const base = this.baseUrl(req);
-    return { publicWebUrl: base, downloadUrl: `${base}/download` };
+    return { publicWebUrl: base, downloadUrl: `${base}/download`, deliveryFee: this.settings.deliveryFee() };
   }
 
   /// Page de téléchargement de l'app : lien stable à partager, qui pointe
@@ -70,7 +70,7 @@ export class ShareController {
 <html lang="fr"><head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Télécharger Karataka</title>
-<meta name="description" content="Karataka : achetez, vendez, jouez et gagnez. Téléchargez l'application Android.">
+<meta name="description" content="Karataka : achetez, vendez, jouez et gagnez. Application Android et iPhone.">
 <meta property="og:type" content="website"><meta property="og:site_name" content="Karataka">
 <meta property="og:title" content="Télécharger l'application Karataka">
 <meta property="og:description" content="Boutique, jeux en ligne (échecs, belote, ludo, fanorona…), récompenses. Gratuit.">
@@ -94,6 +94,10 @@ ${release
 ${release.notes ? `<p class="n">${esc(release.notes)}</p>` : ''}`
   : '<p class="v">Le téléchargement sera bientôt disponible.</p>'}
 <ol><li>Touchez « Télécharger pour Android ».</li><li>Ouvrez le fichier reçu.</li><li>Si Android le demande, autorisez l'installation depuis votre navigateur.</li></ol>
+</div>
+<div class="c" style="margin-top:16px">
+<a class="btn" style="background:#102450" href="${esc(base)}/app/">Ouvrir sur iPhone</a>
+<ol><li>Ouvrez ce lien dans <b>Safari</b>.</li><li>Touchez Partager, puis « Sur l'écran d'accueil ».</li><li>Karataka s'ouvre ensuite comme une application, toujours à jour.</li></ol>
 </div></div></body></html>`);
   }
 

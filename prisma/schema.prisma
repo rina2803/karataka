@@ -47,6 +47,12 @@ model User {
   referredById       String?
   notifications      Notification[]
   devices            DeviceToken[]
+  /// Dernière requête authentifiée (« en ligne » si < 5 min), mise à jour
+  /// au plus une fois par minute.
+  lastSeenAt         DateTime?
+  /// Compte supprimé par un admin : données anonymisées, connexion
+  /// impossible ; la ligne reste pour l'historique des commandes et parties.
+  deletedAt          DateTime?
 }
 
 /// Notification affichée dans l'app (cloche) et envoyée sur le téléphone
@@ -507,4 +513,27 @@ model AppSetting {
   key       String   @id
   value     String
   updatedAt DateTime @updatedAt
+}
+
+/// Journal d'utilisation de l'app, consulté par l'admin : connexions,
+/// ouvertures de l'app et actions (commandes, ventes, parties…).
+model ActivityLog {
+  id        String   @id @default(cuid())
+  /// Pas de relation : le journal reste lisible même si le compte disparaît.
+  userId    String?
+  username  String?
+  /// Clé courte (login, app_open, order, …) et texte lisible.
+  action    String
+  label     String
+  method    String?
+  path      String?
+  status    Int?
+  ip        String?
+  device    String?
+  /// Admin connecté « dans le compte » de l'utilisateur, le cas échéant.
+  byAdmin   String?
+  createdAt DateTime @default(now())
+
+  @@index([createdAt])
+  @@index([userId, createdAt])
 }

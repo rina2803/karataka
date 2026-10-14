@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Post, Query, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Param, Patch, Post, Query, UseGuards } from '@nestjs/common';
 import { CartService } from './cart.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { AdminGuard } from '../auth/admin.guard';
@@ -11,6 +11,12 @@ export class AdminCartController {
   @Get()
   list(@Query('status') status?: string) {
     return this.cart.listOrders(status);
+  }
+
+  /// Modifier le total des achats et/ou les frais de livraison.
+  @Patch(':id')
+  update(@Param('id') id: string, @Body() body: { itemsTotal?: number | string; deliveryFee?: number | string; note?: string }) {
+    return this.cart.adminUpdateAmounts(id, body);
   }
 
   @Post(':id/approve')

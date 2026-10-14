@@ -17,6 +17,7 @@ import { WalletService } from '../wallet/wallet.service';
 import { PointsService } from '../points/points.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { Chess } from 'chess.js';
+import { ActivityService } from '../activity/activity.service';
 
 const MIN_STAKE = 2000; // Ar — mise minimale imposée.
 const ALLOWED_TIME_CONTROLS_MIN = [0, 10, 20, 30]; // 0 = sans limite.
@@ -73,6 +74,7 @@ export class RealtimeGateway implements OnGatewayInit, OnGatewayConnection, OnGa
     private wallet: WalletService,
     private points: PointsService,
     private notifications: NotificationsService,
+    private activity: ActivityService,
   ) {}
 
   afterInit(server: Server) {
@@ -272,6 +274,8 @@ export class RealtimeGateway implements OnGatewayInit, OnGatewayConnection, OnGa
       this.logger.warn(`[chess:create-room] User not found: ${userId}`);
       return { error: 'User not found' };
     }
+    this.activity.touch(userId);
+    this.activity.record({ userId, action: 'game', label: 'Salle d’échecs créée' });
 
     // Validation des paramètres
     const rawStake = Number(data?.stake) || 0;
@@ -343,6 +347,7 @@ export class RealtimeGateway implements OnGatewayInit, OnGatewayConnection, OnGa
 
     const player = await this.buildPlayer(userId);
     if (!player) return { error: 'User not found' };
+    if (!room.players.has(userId)) this.activity.record({ userId, action: 'game', label: 'A rejoint une partie d’échecs' });
 
     room.players.set(userId, player);
     this.socketToRoom.set(socket.id, room.id);

@@ -1,4 +1,6 @@
 import { Module } from '@nestjs/common';
+import { PrismaModule } from './prisma/prisma.module';
+import { ActivityModule } from './activity/activity.module';
 import { AuthModule } from './auth/auth.module';
 import { UsersModule } from './users/users.module';
 import { WalletModule } from './wallet/wallet.module';
@@ -7,7 +9,6 @@ import { GamesModule } from './games/games.module';
 import { RealtimeModule } from './realtime/realtime.module';
 import { MessagesModule } from './messages/messages.module';
 import { AdminModule } from './admin/admin.module';
-import { PrismaService } from './prisma/prisma.service';
 import { HealthController } from './health.controller';
 import { MarketplaceModule } from './marketplace/marketplace.module';
 import { TestController } from './test.controller';
@@ -28,6 +29,8 @@ import { SocialModule } from './social/social.module';
 
 @Module({
   imports: [
+    PrismaModule,
+    ActivityModule,
     AuthModule,
     UsersModule,
     WalletModule,
@@ -53,6 +56,5 @@ import { SocialModule } from './social/social.module';
     NotificationsModule,
   ],
   controllers: [HealthController, TestController],
-  providers: [PrismaService],
 })
 export class AppModule {}

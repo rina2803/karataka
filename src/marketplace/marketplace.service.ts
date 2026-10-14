@@ -20,7 +20,9 @@ const DEFAULT_PRODUCTS = [
 
 const CATEGORY_PRIORITY = ['Repas', 'Vêtements', 'Beauté'];
 
-const SELLER_SELECT = { id: true, username: true, displayName: true, avatarColor: true, avatarImage: true } as const;
+/// Sans `avatarImage` (base64 d'environ 20 Ko) : jamais affichée dans la
+/// boutique, elle multipliait par 20 le poids de chaque page de produits.
+const SELLER_SELECT = { id: true, username: true, displayName: true, avatarColor: true } as const;
 
 /// `mode: insensitive` n'existe qu'en PostgreSQL ; SQLite (local) compare
 /// déjà sans casse en ASCII via LIKE.
@@ -129,8 +131,37 @@ export class MarketplaceService {
     return { ok: true, points };
   }
 
-  productPhoto(productId: string) {
-    return this.prisma.productPhoto.findUnique({ where: { productId } });
+  /// Photos décodées gardées en mémoire (≈ 40 Mo max) : évite de relire et
+  /// décoder le base64 en base à chaque affichage d'une vignette.
+  private photoCache = new Map<string, { mimeType: string; bytes: Buffer; etag: string }>();
+  private photoCacheBytes = 0;
+
+  async productPhotoCached(productId: string) {
+    const hit = this.photoCache.get(productId);
+    if (hit) {
+      this.photoCache.delete(productId);
+      this.photoCache.set(productId, hit);
+      return hit;
+    }
+    const photo = await this.prisma.productPhoto.findUnique({ where: { productId } });
+    if (!photo) return null;
+    const bytes = Buffer.from(photo.data, 'base64');
+    const entry = { mimeType: photo.mimeType, bytes, etag: `"${productId}-${bytes.length}-${photo.data.slice(-12)}"` };
+    this.photoCache.set(productId, entry);
+    this.photoCacheBytes += bytes.length;
+    for (const [key, old] of this.photoCache) {
+      if (this.photoCacheBytes <= 40_000_000) break;
+      this.photoCache.delete(key);
+      this.photoCacheBytes -= old.bytes.length;
+    }
+    return entry;
+  }
+
+  private dropCachedPhoto(productId: string) {
+    const old = this.photoCache.get(productId);
+    if (!old) return;
+    this.photoCache.delete(productId);
+    this.photoCacheBytes -= old.bytes.length;
   }
 
   /// Enregistre une photo base64 (« data:image/png;base64,... » accepté) et
@@ -147,6 +178,7 @@ export class MarketplaceService {
       create: { productId, mimeType, data },
       update: { mimeType, data },
     });
+    this.dropCachedPhoto(productId);
     const imageUrl = `/marketplace/products/${productId}/image?v=${Date.now()}`;
     await this.prisma.product.update({ where: { id: productId }, data: { imageUrl } });
     return imageUrl;

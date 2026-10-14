@@ -13,14 +13,18 @@ import { domino } from './engines/domino';
 import { fanorona } from './engines/fanorona';
 import { ludo } from './engines/ludo';
 import { morpion } from './engines/morpion';
+import { poker } from './engines/poker';
 import { puissance4 } from './engines/puissance4';
 import { quiz } from './engines/quiz';
+import { rami } from './engines/rami';
+import { switchGame } from './engines/switch';
+import { ActivityService } from '../activity/activity.service';
 
 /// Jeux en ligne arbitrés par le serveur (tout sauf les échecs). Le serveur
 /// garde l'état officiel, vérifie chaque coup, tient le temps, fait jouer les
 /// bots et règle mises et Karataka Points.
 export const ENGINES: Record<string, GameEngine> = Object.fromEntries(
-  [dames, fanorona, morpion, puissance4, ludo, belote, domino, quiz].map((e) => [e.slug, e]),
+  [dames, fanorona, morpion, puissance4, ludo, belote, domino, quiz, poker, rami, switchGame].map((e) => [e.slug, e]),
 );
 
 const MIN_STAKE = 2000;
@@ -74,6 +78,7 @@ export class ArenaGateway {
     private wallet: WalletService,
     private points: PointsService,
     private notifications: NotificationsService,
+    private activity: ActivityService,
   ) {
     // Ménage : salles abandonnées depuis plus de 30 minutes.
     setInterval(() => {
@@ -341,6 +346,8 @@ export class ArenaGateway {
     };
     this.rooms.set(id, room);
     this.broadcast(room);
+    this.activity.touch(userId);
+    this.activity.record({ userId, action: 'game', label: `Salle de ${engine.slug} créée (${id})${stake ? `, mise ${stake} Ar` : ''}` });
     return { roomId: id, room: this.serialize(room, 0) };
   }
 
@@ -363,6 +370,8 @@ export class ArenaGateway {
     room.seats.push(seat);
     if (room.status === 'finished') room.status = 'waiting';
     this.broadcast(room);
+    this.activity.touch(userId);
+    this.activity.record({ userId, action: 'game', label: `A rejoint une partie de ${room.game} (${room.id})` });
     return { room: this.serialize(room, room.seats.length - 1) };
   }
 

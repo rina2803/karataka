@@ -17,13 +17,18 @@ export class AuthService {
   async userExists(userId: string): Promise<boolean> {
     const until = this.knownUsers.get(userId);
     if (until && until > Date.now()) return true;
-    const user = await this.prisma.user.findUnique({ where: { id: userId }, select: { id: true } });
-    if (!user) {
+    const user = await this.prisma.user.findUnique({ where: { id: userId }, select: { id: true, deletedAt: true } });
+    if (!user || user.deletedAt) {
       this.knownUsers.delete(userId);
       return false;
     }
     this.knownUsers.set(userId, Date.now() + 60_000);
     return true;
+  }
+
+  /// Compte supprimé ou modifié par un admin : revérifié dès la prochaine requête.
+  forgetUser(userId: string) {
+    this.knownUsers.delete(userId);
   }
 
   async register(data: { username: string; email: string; phone: string; password: string; referralCode?: string }) {
@@ -55,7 +60,7 @@ export class AuthService {
         ? { OR: [{ email: value }, { email: value.toLowerCase() }] }
         : { phone: value.replace(/\s+/g, '') },
     });
-    if (!user) return null;
+    if (!user || user.deletedAt) return null;
     const match = await bcrypt.compare(pass, user.password);
     if (!match) return null;
     const { password, ...rest } = user as any;
@@ -67,10 +72,17 @@ export class AuthService {
     return jwt.sign({ sub: userId }, secret, { expiresIn: '30d' });
   }
 
+  /// Jeton d'un admin « entré » dans le compte d'un utilisateur : `imp` garde
+  /// l'admin d'origine (journal), durée courte.
+  signImpersonationToken(userId: string, adminId: string) {
+    const secret = process.env.JWT_SECRET || 'dev_secret';
+    return jwt.sign({ sub: userId, imp: adminId }, secret, { expiresIn: '4h' });
+  }
+
   verifyToken(token: string) {
     const secret = process.env.JWT_SECRET || 'dev_secret';
     try {
-      return jwt.verify(token, secret) as { sub: string; iat?: number; exp?: number };
+      return jwt.verify(token, secret) as { sub: string; imp?: string; iat?: number; exp?: number };
     } catch {
       return null;
     }
